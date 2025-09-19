@@ -21,6 +21,12 @@ export default function Time() {
     project_phase_id: ""
   });
 
+  // Fetch active time entry (only poll when active)
+  const { data: activeEntry, refetch: refetchActiveEntry } = useQuery<TimeEntry | null>({
+    queryKey: ['/api/time-entries/active'],
+    refetchInterval: (data) => data ? 1000 : false, // Only poll when active
+  });
+
   // Update current time only when active
   useEffect(() => {
     if (!activeEntry) return;
@@ -30,12 +36,6 @@ export default function Time() {
     }, 1000);
     return () => clearInterval(timer);
   }, [activeEntry]);
-
-  // Fetch active time entry (only poll when active)
-  const { data: activeEntry, refetch: refetchActiveEntry } = useQuery<TimeEntry | null>({
-    queryKey: ['/api/time-entries/active'],
-    refetchInterval: (data) => data ? 1000 : false, // Only poll when active
-  });
 
   // Fetch all time entries
   const { data: timeEntries = [], refetch: refetchTimeEntries } = useQuery<TimeEntry[]>({
@@ -139,15 +139,17 @@ export default function Time() {
     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   };
 
-  const formatTime = (timeString: string) => {
-    return new Date(timeString).toLocaleTimeString('en-US', { 
+  const formatTime = (timeString: string | Date) => {
+    const date = typeof timeString === 'string' ? new Date(timeString) : timeString;
+    return date.toLocaleTimeString('en-US', { 
       hour: '2-digit', 
       minute: '2-digit' 
     });
   };
 
-  const formatDate = (timeString: string) => {
-    return new Date(timeString).toLocaleDateString('en-US', {
+  const formatDate = (timeString: string | Date) => {
+    const date = typeof timeString === 'string' ? new Date(timeString) : timeString;
+    return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric'
     });
