@@ -1,12 +1,12 @@
 import { Link, useLocation } from "wouter";
-import { Home, Clock, CheckSquare, Heart, User } from "lucide-react";
+import { Home, Clock, CheckSquare, Heart, FileText } from "lucide-react";
 
 const mobileNavigation = [
   { name: "Home", href: "/", icon: Home },
   { name: "Time", href: "/time", icon: Clock },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Health", href: "/health", icon: Heart },
-  { name: "Profile", href: "/profile", icon: User },
+  { name: "Invoices", href: "/invoices", icon: FileText },
 ];
 
 export default function MobileNav() {
