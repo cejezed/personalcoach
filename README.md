@@ -1,22 +1,22 @@
-# Coach App - Time Tracking & Health Dashboard
+# Coach App – Time Tracking & Health Dashboard
 
-A comprehensive Node.js monorepo coach application with time tracking, health monitoring, and billing features using Supabase.
+Een Node.js monorepo coach applicatie met:
+- ⏱️ Tijdregistratie (projecten, fases, taken, entries)
+- ❤️ Health tracking (energie, slaap, beweging, voeding)
+- 💳 Billing (uurtarief, fixed, capped modellen, facturatie)
+- 🔐 Supabase voor auth, database, storage
+- 🌐 Frontend: React/Next.js + Vite
+- ⚡ API: Express server
 
-## Setup
+---
 
-1. Create a Supabase project at [supabase.com](https://supabase.com/dashboard/projects)
-2. Copy the database URL from Connection -> Transaction pooler
-3. Set the `DATABASE_URL` environment variable with your Supabase connection string
-4. Run the Supabase migrations to set up the database schema
-5. Set the following environment variables in your Replit:
-   - `VITE_SUPABASE_URL`: Your Supabase project URL
-   - `VITE_SUPABASE_ANON_KEY`: Your Supabase anon public key
+## 🚀 Setup
 
-## Development
+1. Maak een project aan in [Supabase](https://supabase.com/dashboard/projects).
+2. Kopieer je **Database URL** uit *Connection → Transaction Pooler*.
+3. Zet de volgende environment variables (in `.env` of via Replit/GitHub Codespaces → Secrets):
 
-```bash
-# Install dependencies
-pnpm install
-
-# Run development servers
-./dev.sh
+   ```env
+   DATABASE_URL=postgres://...
+   VITE_SUPABASE_URL=https://<project>.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key

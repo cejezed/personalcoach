@@ -1,19 +1,12 @@
 #!/bin/bash
-
-# Install dependencies
-pnpm -w install
-
-# Start server in background
+set -e
 echo "Starting server..."
-cd apps/server
-PORT=${PORT:-8080} pnpm dev &
+pnpm exec tsx server/index.ts &
 SERVER_PID=$!
 
-# Start client
-echo "Starting client..."
-cd ../client
-PORT=${PORT:-5000} pnpm dev &
+echo "Starting Vite..."
+pnpm exec vite &
 CLIENT_PID=$!
 
-# Wait for both processes
-wait $SERVER_PID $CLIENT_PID
+trap "kill $SERVER_PID $CLIENT_PID" INT
+wait
