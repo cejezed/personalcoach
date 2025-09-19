@@ -50,6 +50,7 @@ export interface IStorage {
   createOrUpdateSteps(steps: InsertSteps): Promise<Steps>;
   
   getRecentEnergyChecks(): Promise<EnergyCheck[]>;
+  getEnergyCheckForDate(date: string): Promise<EnergyCheck | undefined>;
   createEnergyCheck(energyCheck: InsertEnergyCheck): Promise<EnergyCheck>;
   
   // Billing
@@ -297,8 +298,34 @@ export class MemStorage implements IStorage {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     
     return Array.from(this.energyChecks.values())
-      .filter(check => check.logged_at && check.logged_at >= sevenDaysAgo)
-      .sort((a, b) => (b.logged_at?.getTime() ?? 0) - (a.logged_at?.getTime() ?? 0));
+      .filter(check => {
+        if (!check.logged_at) return false;
+        const ts = new Date(check.logged_at as any);
+        return ts >= sevenDaysAgo;
+      })
+      .sort((a, b) => {
+        const aTime = a.logged_at ? new Date(a.logged_at as any).getTime() : 0;
+        const bTime = b.logged_at ? new Date(b.logged_at as any).getTime() : 0;
+        return bTime - aTime;
+      });
+  }
+
+  async getEnergyCheckForDate(date: string): Promise<EnergyCheck | undefined> {
+    const dateChecks = Array.from(this.energyChecks.values())
+      .filter(check => {
+        if (!check.logged_at) return false;
+        const checkDateStr = check.logged_at instanceof Date 
+          ? check.logged_at.toISOString().split('T')[0]
+          : new Date(check.logged_at).toISOString().split('T')[0];
+        return checkDateStr === date;
+      })
+      .sort((a, b) => {
+        const aTime = a.logged_at ? new Date(a.logged_at).getTime() : 0;
+        const bTime = b.logged_at ? new Date(b.logged_at).getTime() : 0;
+        return bTime - aTime;
+      });
+    
+    return dateChecks[0]; // Return most recent energy check for that date
   }
 
   async createEnergyCheck(insertEnergyCheck: InsertEnergyCheck): Promise<EnergyCheck> {
@@ -307,7 +334,7 @@ export class MemStorage implements IStorage {
       ...insertEnergyCheck,
       id,
       user_id: 'mock-user-id',
-      logged_at: insertEnergyCheck.logged_at ?? null,
+      logged_at: insertEnergyCheck.logged_at ? new Date(insertEnergyCheck.logged_at) : new Date(),
       mood: insertEnergyCheck.mood ?? null,
       notes: insertEnergyCheck.notes ?? null,
       created_at: new Date(),

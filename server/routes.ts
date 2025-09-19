@@ -254,6 +254,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get energy check for specific date
+  app.get('/api/energy-checks/:date', async (req, res) => {
+    try {
+      const energyCheck = await storage.getEnergyCheckForDate(req.params.date);
+      res.json(energyCheck || null);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch energy check for date' });
+    }
+  });
+
   app.post('/api/energy-checks', async (req, res) => {
     try {
       const validatedData = insertEnergyCheckSchema.parse(req.body);

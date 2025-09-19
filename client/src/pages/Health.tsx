@@ -448,15 +448,65 @@ function EnergyTab() {
   });
 
   // Fetch recent energy checks
-  const { data: energyChecks = [], refetch: refetchEnergyChecks } = useQuery<EnergyCheck[]>({
+  const { data: energyChecks = [] } = useQuery<EnergyCheck[]>({
     queryKey: ['/api/energy-checks'],
   });
 
-  // Create energy check mutation
+  // Today's energy check (date-specific like steps)
+  const todayEnergyYMD = new Date().toISOString().split('T')[0];
+  const { data: todaysEnergyCheck } = useQuery<EnergyCheck | null>({
+    queryKey: ['/api/energy-checks', todayEnergyYMD],
+  });
+
+  // Create energy check mutation with optimistic updates
   const createEnergyMutation = useMutation({
     mutationFn: async (data: InsertEnergyCheck) => {
       const response = await apiRequest('POST', '/api/energy-checks', data);
       return response.json();
+    },
+    onMutate: async (newEnergyCheck) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['/api/energy-checks'] });
+      await queryClient.cancelQueries({ queryKey: ['/api/energy-checks', todayEnergyYMD] });
+      
+      // Snapshot the previous values
+      const previousEnergyChecks = queryClient.getQueryData(['/api/energy-checks']);
+      const previousTodaysCheck = queryClient.getQueryData(['/api/energy-checks', todayEnergyYMD]);
+      
+      // Optimistically update both queries
+      const optimisticCheck: EnergyCheck = {
+        id: `temp-${Date.now()}`,
+        user_id: 'mock-user-id',
+        energy_level: newEnergyCheck.energy_level,
+        mood: newEnergyCheck.mood || null,
+        notes: newEnergyCheck.notes || null,
+        logged_at: new Date(),
+        created_at: new Date()
+      };
+      
+      // Update recent checks list
+      queryClient.setQueryData(['/api/energy-checks'], (old: EnergyCheck[] | undefined) => {
+        return old ? [optimisticCheck, ...old] : [optimisticCheck];
+      });
+      
+      // Update today's check
+      queryClient.setQueryData(['/api/energy-checks', todayEnergyYMD], optimisticCheck);
+      
+      return { previousEnergyChecks, previousTodaysCheck };
+    },
+    onError: (err, newEnergyCheck, context) => {
+      // Rollback on error
+      if (context?.previousEnergyChecks) {
+        queryClient.setQueryData(['/api/energy-checks'], context.previousEnergyChecks);
+      }
+      if (context?.previousTodaysCheck !== undefined) {
+        queryClient.setQueryData(['/api/energy-checks', todayEnergyYMD], context.previousTodaysCheck);
+      }
+      toast({
+        title: "Error",
+        description: "Failed to log energy level. Please try again.",
+        variant: "destructive"
+      });
     },
     onSuccess: () => {
       toast({
@@ -465,15 +515,10 @@ function EnergyTab() {
       });
       setIsCreateDialogOpen(false);
       setEnergyFormData({ energy_level: 3, mood: "", notes: "" });
-      // Invalidate cache to trigger refetch
-      queryClient.invalidateQueries({ queryKey: ['/api/energy-checks'] });
     },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to log energy level. Please try again.",
-        variant: "destructive"
-      });
+    onSettled: () => {
+      // Always refetch after success/error to replace optimistic data with real data
+      queryClient.invalidateQueries({ queryKey: ['/api/energy-checks'] });
     }
   });
 
@@ -524,18 +569,8 @@ function EnergyTab() {
     }
   };
 
-  // Get today's latest energy check (using stable YYYY-MM-DD format)
-  const todayYMD = new Date().toISOString().split('T')[0];
-  const todaysEnergyChecks = energyChecks.filter(check => {
-    if (!check.logged_at) return false;
-    const checkDateYMD = new Date(check.logged_at).toISOString().split('T')[0];
-    return checkDateYMD === todayYMD;
-  });
-  const latestEnergyToday = todaysEnergyChecks.sort((a, b) => {
-    const aTime = a.logged_at ? new Date(a.logged_at).getTime() : 0;
-    const bTime = b.logged_at ? new Date(b.logged_at).getTime() : 0;
-    return bTime - aTime;
-  })[0];
+  // Use the date-specific energy check instead of client-side filtering
+  const latestEnergyToday = todaysEnergyCheck;
 
 
   return (
