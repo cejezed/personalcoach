@@ -279,6 +279,7 @@ export const insertWorkoutSchema = createInsertSchema(workouts).omit({
   created_at: true,
 }).extend({
   intensity: z.enum(['low', 'medium', 'high']).optional(),
+  logged_at: z.string().datetime().optional(),
 });
 
 export const insertStepsSchema = createInsertSchema(steps).omit({
@@ -288,6 +289,7 @@ export const insertStepsSchema = createInsertSchema(steps).omit({
   updated_at: true,
 }).extend({
   source: z.string().default('manual'),
+  step_date: z.string().date(),
 });
 
 export const insertEnergyCheckSchema = createInsertSchema(energy_checks).omit({
@@ -296,6 +298,7 @@ export const insertEnergyCheckSchema = createInsertSchema(energy_checks).omit({
   created_at: true,
 }).extend({
   energy_level: z.number().min(1).max(5),
+  logged_at: z.string().datetime().optional(),
 });
 
 // Project Phases
