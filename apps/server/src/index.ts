@@ -3,7 +3,7 @@ import cors from 'cors';
 import { registerRoutes } from './routes.js';
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = parseInt(process.env.PORT || '8080', 10);
 
 // Middleware
 app.use(cors());

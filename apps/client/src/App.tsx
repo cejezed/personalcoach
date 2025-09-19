@@ -42,12 +42,14 @@ function App() {
     );
   }
 
-  if (!user) {
-    return <Login />;
-  }
+  // Temporarily skip authentication for development
+  // if (!user) {
+  //   return <Login />;
+  // }
+  const mockUser = { id: '1', email: 'dev@example.com' } as User;
 
   return (
-    <Layout user={user}>
+    <Layout user={mockUser}>
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/tasks" component={Tasks} />
