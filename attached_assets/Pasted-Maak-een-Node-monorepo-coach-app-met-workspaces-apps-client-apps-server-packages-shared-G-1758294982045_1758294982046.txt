@@ -1,0 +1,62 @@
+Maak een Node monorepo `coach-app` met workspaces `apps/client`, `apps/server`, `packages/shared`. Gebruik pnpm, Vite + React + Tailwind (client) en Express (server). Optimaliseer voor Replit (Nix + $PORT) en Supabase (Auth + Postgres + RLS).
+
+ROOT
+- package.json (workspaces: apps/*, packages/*), scripts: "dev:client", "dev:server"
+- .replit met: run = "bash -lc './dev.sh'"
+- replit.nix deps: nodejs_20, pnpm, bash, coreutils, unzip
+- dev.sh: `pnpm -w install`; start server op $PORT en client op 5173
+- README.md met setup & smoke tests
+- supabase/sql/ met 6 migraties (idempotent):
+  001: Core schema
+    - Lookup: phases (NL fasen)
+    - Zakelijk: projects (incl default_rate_cents), project_phases (billing_model: hourly|fixed|capped, minutes_budget, rate_cents, fixed_amount_cents, cap_minutes), tasks, time_entries, invoices, invoice_items (amount_override_cents)
+    - Persoonlijk: meals, sleep_sessions, workouts, energy_checks, body_metrics
+    - Integratie/meta: calendar_links, events_cache, user_settings
+    - Triggers: set_user_id() voor user-tabellen
+    - Trigger: set_invoice_item_amount() → amount_cents = COALESCE(amount_override, minutes*rate/60)
+  002: Views & RPC
+    - v_time_by_project_phase_day|week|month
+    - v_billing_status_by_project_phase (basis)
+    - report_time_summary(grouping, project, phase, from_date, to_date)
+  003: RLS & policies
+    - RLS aan op alle tabellen; eigen-data-only; phases read-only; triggers actief
+  004: Billing view 2.0 + project default rate
+    - projects.default_rate_cents
+    - v_billing_status_by_project_phase met effective_rate, minutes_open, amount_open_cents (hourly/fixed/capped)
+  005: RPC factuur genereren
+    - create_invoice_from_open(proj, issue, due?, number?, phases?)
+  006: Workouts-checklist + Steps
+    - workout_activities (incl basic, pushups, golf, mountain_bike, …)
+    - daily_workouts (uniek per user+dag) + daily_workout_items (minutes/reps/intensiteit)
+    - steps (uniek per user+dag+source), v_steps_last30, v_workout_summary_last30
+    - upsert_steps_bulk(jsonb) RPC
+
+packages/shared
+- src/types.ts met Zod types (Task, EnergyCheck), src/index.ts export
+
+apps/server (Express)
+- CORS + JSON
+- Routes:
+  - GET /api/health → { ok:true, now }
+  - POST /api/coach/suggest → dummy advies
+  - GET /api/calendar/preview → placeholder
+  - POST /api/invoices/:id/pdf → 501 (TODO)
+- Luistert op process.env.PORT || 8080
+
+apps/client (React + Vite + Tailwind)
+- Vite server: host:true, port: Number(process.env.PORT) || 5173
+- src/lib/supabase.ts (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
+- Router + layout (sidebar desktop, bottom tabs mobiel)
+- Routes:
+  /login (Supabase e-mail+wachtwoord)
+  / (Dashboard)
+  /tasks (stub)
+  /time (uren invoer + overzicht via RPC + facturatieblok via view + “Genereer factuur van open werk” via RPC)
+  /budgets (projecttarief + per fase model Uur/Vast/Cap met velden en opslaan)
+  /invoices (stub)
+  /health → tabs:
+    - /health/workouts (checklist activiteiten; per activiteit minuten of reps + intensiteit; overzicht laatste 14 dagen)
+    - /health/steps (laatste 30 dagen; Import JSON → upsert_steps_bulk)
+  /backup (Export alles JSON, per tabel CSV, Import JSON met upsert; steps via RPC)
+  /coach (stub)
+- Net gestylde cards (Tailwind), lege states ok
