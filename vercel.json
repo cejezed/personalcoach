@@ -1,20 +1,11 @@
-// api/index.js
-export default function handler(req, res) {
-  console.log('Handler called:', req.method, req.url);
-  
-  try {
-    res.status(200).json({
-      message: 'Hello from Vercel!',
-      method: req.method,
-      url: req.url,
-      timestamp: new Date().toISOString(),
-      headers: req.headers
-    });
-  } catch (error) {
-    console.error('Handler error:', error);
-    res.status(500).json({
-      error: 'Internal server error',
-      message: error.message
-    });
-  }
+{
+  "functions": {
+    "api/**": {
+      "runtime": "@vercel/node@5.3.21"
+    }
+  },
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }
