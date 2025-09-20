@@ -15,4 +15,4 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
-}
+}// Force rebuild Sat Sep 20 18:16:21 UTC 2025
