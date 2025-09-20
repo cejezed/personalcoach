@@ -1,10 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import serverless from 'serverless-http';
+import type { Express } from 'express';
 
 // Import the Express app
-let app: any;
+let app: Express | null = null;
 
-const getApp = async () => {
+const getApp = async (): Promise<Express> => {
   if (!app) {
     const module = await import('../server/index.js');
     app = module.default;
