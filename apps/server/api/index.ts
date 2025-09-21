@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
+  console.log('Handler called:', req.method, req.url);
+  
   try {
     res.status(200).json({
       message: 'Hello from Vercel!',
@@ -10,9 +12,9 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error) {
     console.error('Handler error:', error);
-    res.status(500).json({
+    res.status(500).json({ 
       error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
-}// Force rebuild Sat Sep 20 18:16:21 UTC 2025
+}

@@ -1,403 +1,564 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Play, Pause, Square, Clock, Calendar, Edit, Trash2, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
-import type { TimeEntry, Project } from "@shared/schema";
+import React, { useState, useMemo } from 'react';
+import { Plus, Calendar, FileText, Euro, Download } from 'lucide-react';
 
-export default function Time() {
-  const { toast } = useToast();
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [timerDuration, setTimerDuration] = useState("00:00:00");
-  const [isStartDialogOpen, setIsStartDialogOpen] = useState(false);
-  const [startFormData, setStartFormData] = useState({
-    description: "",
-    project_phase_id: ""
+const ArchitectTimeTracking = () => {
+  const [projects, setProjects] = useState([
+    { 
+      id: '1', 
+      name: 'Villa Waterfront', 
+      city: 'Amstelveen', 
+      client_name: 'Familie Jansen',
+      default_rate_cents: 8500,
+      created_at: '2024-01-15'
+    },
+    { 
+      id: '2', 
+      name: 'Kantoorgebouw Centrum', 
+      city: 'Amsterdam', 
+      client_name: 'BV Vastgoed',
+      default_rate_cents: 9500,
+      created_at: '2024-02-20'
+    }
+  ]);
+
+  const [phases] = useState([
+    { code: 'schetsontwerp', name: 'Schetsontwerp', sort_order: 1 },
+    { code: 'voorlopig-ontwerp', name: 'Voorlopig ontwerp', sort_order: 2 },
+    { code: 'vo-tekeningen', name: 'VO tekeningen', sort_order: 3 },
+    { code: 'definitief-ontwerp', name: 'Definitief ontwerp', sort_order: 4 },
+    { code: 'do-tekeningen', name: 'DO tekeningen', sort_order: 5 },
+    { code: 'bouwvoorbereiding', name: 'Bouwvoorbereiding', sort_order: 6 },
+    { code: 'bv-tekeningen', name: 'BV tekeningen', sort_order: 7 },
+    { code: 'uitvoering', name: 'Uitvoering', sort_order: 8 },
+    { code: 'uitvoering-tekeningen', name: 'Uitvoering tekeningen', sort_order: 9 },
+    { code: 'oplevering-nazorg', name: 'Oplevering/nazorg', sort_order: 10 }
+  ]);
+
+  const [timeEntries, setTimeEntries] = useState([
+    {
+      id: '1',
+      project_id: '1',
+      phase_code: 'schetsontwerp',
+      occurred_on: '2024-09-15',
+      hours: 4,
+      notes: 'Eerste schetsen en ruimtelijke opzet',
+      invoiced: false,
+      invoiceAmount: 0
+    },
+    {
+      id: '2',
+      project_id: '1',
+      phase_code: 'voorlopig-ontwerp',
+      occurred_on: '2024-09-18',
+      hours: 6,
+      notes: 'VO uitwerking plattegronden',
+      invoiced: true,
+      invoiceAmount: 510
+    }
+  ]);
+
+  const [newEntry, setNewEntry] = useState({
+    projectId: '',
+    phaseCode: '',
+    date: new Date().toISOString().split('T')[0],
+    hours: '',
+    description: '',
+    invoiced: false,
+    invoiceAmount: 0
   });
 
-  // Fetch active time entry (only poll when active)
-  const { data: activeEntry, refetch: refetchActiveEntry } = useQuery<TimeEntry | null>({
-    queryKey: ['/api/time-entries/active'],
-    refetchInterval: (data) => data ? 1000 : false, // Only poll when active
+  const [newProject, setNewProject] = useState({
+    name: '',
+    city: '',
+    client_name: '',
+    default_rate_cents: 8500
   });
 
-  // Update current time only when active
-  useEffect(() => {
-    if (!activeEntry) return;
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [viewMode, setViewMode] = useState('entries');
+
+  const selectedProject = projects.find(p => p.id === newEntry.projectId);
+
+  const addProject = () => {
+    if (newProject.name && newProject.city && newProject.client_name) {
+      const project = {
+        id: Date.now().toString(),
+        ...newProject,
+        created_at: new Date().toISOString().split('T')[0]
+      };
+      setProjects([project, ...projects]);
+      setNewProject({ name: '', city: '', client_name: '', default_rate_cents: 8500 });
+      setShowNewProject(false);
+    }
+  };
+
+  const addTimeEntry = () => {
+    if (newEntry.projectId && newEntry.phaseCode && newEntry.date && newEntry.hours) {
+      const entry = {
+        id: Date.now().toString(),
+        project_id: newEntry.projectId,
+        phase_code: newEntry.phaseCode,
+        occurred_on: newEntry.date,
+        hours: parseFloat(newEntry.hours),
+        notes: newEntry.description || null,
+        invoiced: newEntry.invoiced,
+        invoiceAmount: newEntry.invoiced ? newEntry.invoiceAmount : 0
+      };
+
+      setTimeEntries([entry, ...timeEntries]);
+      setNewEntry({
+        projectId: '',
+        phaseCode: '',
+        date: new Date().toISOString().split('T')[0],
+        hours: '',
+        description: '',
+        invoiced: false,
+        invoiceAmount: 0
+      });
+    }
+  };
+
+  const toggleInvoiced = (entryId, amount = 0) => {
+    setTimeEntries(timeEntries.map(entry => 
+      entry.id === entryId 
+        ? { ...entry, invoiced: !entry.invoiced, invoiceAmount: !entry.invoiced ? amount : 0 }
+        : entry
+    ));
+  };
+
+  const getProjectById = (id) => projects.find(p => p.id === id);
+  const getPhaseByCode = (code) => phases.find(p => p.code === code);
+
+  // Export function
+  const exportToCSV = () => {
+    const csvHeader = 'Datum,Project,Woonplaats,Opdrachtgever,Fase,Uren,Omschrijving,Uurtarief,Bedrag,Status\n';
     
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [activeEntry]);
-
-  // Fetch all time entries
-  const { data: timeEntries = [], refetch: refetchTimeEntries } = useQuery<TimeEntry[]>({
-    queryKey: ['/api/time-entries'],
-  });
-
-  // Fetch projects for selection
-  const { data: projects = [] } = useQuery<Project[]>({
-    queryKey: ['/api/projects'],
-  });
-
-  // Update timer duration when active entry changes
-  useEffect(() => {
-    if (activeEntry) {
-      const startTime = new Date(activeEntry.start_time);
-      const elapsed = Math.floor((currentTime.getTime() - startTime.getTime()) / 1000);
-      const hours = Math.floor(elapsed / 3600);
-      const minutes = Math.floor((elapsed % 3600) / 60);
-      const seconds = elapsed % 60;
-      setTimerDuration(
-        `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-      );
-    } else {
-      setTimerDuration("00:00:00");
-    }
-  }, [activeEntry, currentTime]);
-
-  // Start time tracking mutation
-  const startTimerMutation = useMutation({
-    mutationFn: async (data: { description: string; project_phase_id?: string }) => {
-      const response = await apiRequest('POST', '/api/time-entries/start', data);
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Timer Started",
-        description: "Time tracking has begun for your task.",
-      });
-      setIsStartDialogOpen(false);
-      setStartFormData({ description: "", project_phase_id: "" });
-      refetchActiveEntry();
-      refetchTimeEntries();
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to start timer. Please try again.",
-        variant: "destructive"
-      });
-    }
-  });
-
-  // Stop time tracking mutation
-  const stopTimerMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await apiRequest('PATCH', `/api/time-entries/${id}/stop`, {});
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Timer Stopped",
-        description: "Time entry has been saved successfully.",
-      });
-      refetchActiveEntry();
-      refetchTimeEntries();
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to stop timer. Please try again.",
-        variant: "destructive"
-      });
-    }
-  });
-
-  // Delete time entry mutation
-  const deleteEntryMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest('DELETE', `/api/time-entries/${id}`, {});
-    },
-    onSuccess: () => {
-      toast({
-        title: "Entry Deleted",
-        description: "Time entry has been deleted successfully.",
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/time-entries'] });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to delete entry. Please try again.",
-        variant: "destructive"
-      });
-    }
-  });
-
-  const formatDuration = (minutes: number | null) => {
-    if (!minutes) return "0m";
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+    const csvRows = timeEntries.map(entry => {
+      const project = getProjectById(entry.project_id) || {};
+      const phase = getPhaseByCode(entry.phase_code) || {};
+      const rate = (project.default_rate_cents || 0) / 100;
+      const amount = (entry.hours || 0) * rate;
+      
+      return [
+        new Date(entry.occurred_on).toLocaleDateString('nl-NL'),
+        `"${project.name || ''}"`,
+        `"${project.city || ''}"`,
+        `"${project.client_name || ''}"`,
+        `"${phase.name || ''}"`,
+        entry.hours?.toFixed(2) || '0',
+        `"${entry.notes || ''}"`,
+        rate.toFixed(2),
+        amount.toFixed(2),
+        entry.invoiced ? 'Gefactureerd' : 'Open'
+      ].join(',');
+    }).join('\n');
+    
+    const csvContent = csvHeader + csvRows;
+    const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(csvBlob);
+    link.download = `uurenadministratie-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const formatTime = (timeString: string | Date) => {
-    const date = typeof timeString === 'string' ? new Date(timeString) : timeString;
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+  // Summary calculations
+  const projectSummary = useMemo(() => {
+    const summary = {};
+    
+    timeEntries.forEach(entry => {
+      const project = getProjectById(entry.project_id);
+      if (!project) return;
+      
+      if (!summary[entry.project_id]) {
+        summary[entry.project_id] = {
+          project,
+          phases: {},
+          totalHours: 0,
+          totalInvoiced: 0,
+          totalUnbilled: 0
+        };
+      }
+      
+      if (!summary[entry.project_id].phases[entry.phase_code]) {
+        summary[entry.project_id].phases[entry.phase_code] = {
+          hours: 0,
+          invoiced: 0,
+          unbilled: 0
+        };
+      }
+      
+      summary[entry.project_id].phases[entry.phase_code].hours += entry.hours;
+      summary[entry.project_id].totalHours += entry.hours;
+      
+      if (entry.invoiced) {
+        summary[entry.project_id].phases[entry.phase_code].invoiced += entry.invoiceAmount;
+        summary[entry.project_id].totalInvoiced += entry.invoiceAmount;
+      } else {
+        const unbilledAmount = entry.hours * (project.default_rate_cents / 100);
+        summary[entry.project_id].phases[entry.phase_code].unbilled += unbilledAmount;
+        summary[entry.project_id].totalUnbilled += unbilledAmount;
+      }
     });
-  };
-
-  const formatDate = (timeString: string | Date) => {
-    const date = typeof timeString === 'string' ? new Date(timeString) : timeString;
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const handleStartTimer = () => {
-    const data: any = {
-      description: startFormData.description || "Working on task"
-    };
-    if (startFormData.project_phase_id) {
-      data.project_phase_id = startFormData.project_phase_id;
-    }
-    startTimerMutation.mutate(data);
-  };
-
-  // Calculate total time today
-  const today = new Date().toDateString();
-  const todayEntries = timeEntries.filter(entry => 
-    new Date(entry.start_time).toDateString() === today && entry.end_time
-  );
-  const totalMinutesToday = todayEntries.reduce((sum, entry) => sum + (entry.minutes || 0), 0);
+    
+    return summary;
+  }, [timeEntries, projects]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Time Tracking</h1>
-        <p className="text-muted-foreground mt-2">Track time entries and manage your work hours</p>
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-gray-900">Architectenbureau Uurenadministratie</h1>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => setViewMode('entries')}
+            className={`px-4 py-2 rounded-lg ${viewMode === 'entries' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+          >
+            Uren invoer
+          </button>
+          <button
+            onClick={() => setViewMode('summary')}
+            className={`px-4 py-2 rounded-lg ${viewMode === 'summary' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+          >
+            Project overzicht
+          </button>
+          <button
+            onClick={() => setViewMode('invoicing')}
+            className={`px-4 py-2 rounded-lg ${viewMode === 'invoicing' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+          >
+            Facturatie
+          </button>
+          <button
+            onClick={exportToCSV}
+            className="px-4 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 flex items-center space-x-2"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export</span>
+          </button>
+        </div>
       </div>
 
-      {/* Current Timer */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Current Time Entry
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {activeEntry ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-medium" data-testid="text-current-task">
-                    {activeEntry.description || "Working on task"}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Started at {formatTime(activeEntry.start_time)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <div className="text-3xl font-mono font-bold text-primary" data-testid="text-timer-duration">
-                    {timerDuration}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Running
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <Button 
-                  onClick={() => activeEntry && stopTimerMutation.mutate(activeEntry.id)}
-                  variant="destructive" 
-                  className="flex-1"
-                  disabled={stopTimerMutation.isPending}
-                  data-testid="button-stop-timer"
+      {/* New Project Form */}
+      {showNewProject && (
+        <div className="bg-white rounded-lg shadow-sm border p-4">
+          <h2 className="text-lg font-semibold mb-4">Nieuw project toevoegen</h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <input
+              type="text"
+              placeholder="Projectnaam"
+              value={newProject.name}
+              onChange={(e) => setNewProject({...newProject, name: e.target.value})}
+              className="border border-gray-300 rounded-md px-3 py-2"
+            />
+            <input
+              type="text"
+              placeholder="Woonplaats"
+              value={newProject.city}
+              onChange={(e) => setNewProject({...newProject, city: e.target.value})}
+              className="border border-gray-300 rounded-md px-3 py-2"
+            />
+            <input
+              type="text"
+              placeholder="Opdrachtgever"
+              value={newProject.client_name}
+              onChange={(e) => setNewProject({...newProject, client_name: e.target.value})}
+              className="border border-gray-300 rounded-md px-3 py-2"
+            />
+            <input
+              type="number"
+              placeholder="Uurtarief (eurocent)"
+              value={newProject.default_rate_cents}
+              onChange={(e) => setNewProject({...newProject, default_rate_cents: parseInt(e.target.value) || 0})}
+              className="border border-gray-300 rounded-md px-3 py-2"
+            />
+          </div>
+          <div className="flex space-x-2">
+            <button
+              onClick={addProject}
+              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg"
+            >
+              Project toevoegen
+            </button>
+            <button
+              onClick={() => setShowNewProject(false)}
+              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
+            >
+              Annuleren
+            </button>
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'entries' && (
+        <>
+          {/* Add Time Entry Form */}
+          <div className="bg-white rounded-lg shadow-sm border p-3">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold">Uren registreren</h2>
+              <button
+                onClick={() => setShowNewProject(true)}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded text-sm flex items-center space-x-1"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Nieuw project</span>
+              </button>
+            </div>
+            
+            {/* Eerste rij: Project en Fase */}
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Project *</label>
+                <select
+                  value={newEntry.projectId}
+                  onChange={(e) => setNewEntry({...newEntry, projectId: e.target.value})}
+                  size="11"
+                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm bg-white min-h-[200px]"
+                  required
                 >
-                  <Square className="h-4 w-4 mr-2" />
-                  Stop Timer
-                </Button>
+                  <option value="">-- Selecteer project --</option>
+                  {projects.map(project => (
+                    <option key={project.id} value={project.id}>
+                      {project.name} ({project.city})
+                    </option>
+                  ))}
+                </select>
               </div>
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <div className="text-6xl font-mono font-bold text-muted-foreground mb-4" data-testid="text-timer-duration">
-                {timerDuration}
-              </div>
-              <p className="text-muted-foreground mb-4">No active time entry</p>
               
-              <Dialog open={isStartDialogOpen} onOpenChange={setIsStartDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button size="lg" data-testid="button-start-timer">
-                    <Play className="h-4 w-4 mr-2" />
-                    Start Timer
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Start Time Tracking</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="description">Description</Label>
-                      <Input
-                        id="description"
-                        placeholder="What are you working on?"
-                        value={startFormData.description}
-                        onChange={(e) => setStartFormData(prev => ({ ...prev, description: e.target.value }))}
-                        data-testid="input-task-description"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="project">Project (Optional)</Label>
-                      <p className="text-xs text-muted-foreground">Note: Project phases will be available in a future update</p>
-                      <select
-                        id="project"
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        value={startFormData.project_phase_id}
-                        onChange={(e) => setStartFormData(prev => ({ ...prev, project_phase_id: e.target.value }))}
-                        data-testid="select-project"
-                      >
-                        <option value="">Select a project...</option>
-                        {projects.map(project => (
-                          <option key={project.id} value={project.id}>
-                            {project.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex justify-end gap-3">
-                      <Button variant="outline" onClick={() => setIsStartDialogOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button 
-                        onClick={handleStartTimer}
-                        disabled={startTimerMutation.isPending}
-                        data-testid="button-start-tracking"
-                      >
-                        {startTimerMutation.isPending ? "Starting..." : "Start Tracking"}
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Hours Today</p>
-                <p className="text-2xl font-bold" data-testid="text-hours-today">
-                  {formatDuration(totalMinutesToday)}
-                </p>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Fase *</label>
+                <select
+                  value={newEntry.phaseCode}
+                  onChange={(e) => setNewEntry({...newEntry, phaseCode: e.target.value})}
+                  size="11"
+                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm bg-white min-h-[200px]"
+                  required
+                >
+                  <option value="">-- Selecteer fase --</option>
+                  {phases.map(phase => (
+                    <option key={phase.code} value={phase.code}>{phase.name}</option>
+                  ))}
+                </select>
               </div>
-              <Clock className="h-8 w-8 text-primary" />
             </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
+            
+            {/* Tweede rij: Datum, Uren, Toevoegen knop */}
+            <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Entries Today</p>
-                <p className="text-2xl font-bold" data-testid="text-entries-today">
-                  {todayEntries.length}
-                </p>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Datum *</label>
+                <input
+                  type="date"
+                  value={newEntry.date}
+                  onChange={(e) => setNewEntry({...newEntry, date: e.target.value})}
+                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                  required
+                />
               </div>
-              <Calendar className="h-8 w-8 text-primary" />
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Uren *</label>
+                <input
+                  type="number"
+                  step="0.25"
+                  placeholder="0"
+                  value={newEntry.hours}
+                  onChange={(e) => setNewEntry({...newEntry, hours: e.target.value})}
+                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Actie</label>
+                <button
+                  onClick={addTimeEntry}
+                  disabled={!newEntry.projectId || !newEntry.phaseCode || !newEntry.date || !newEntry.hours}
+                  className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white px-2 py-1 rounded text-sm font-medium h-8"
+                >
+                  Toevoegen
+                </button>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+            
+            {/* Optionele omschrijving */}
+            <div className="mb-3">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Omschrijving (optioneel)</label>
+              <input
+                type="text"
+                placeholder="Beschrijving van werkzaamheden..."
+                value={newEntry.description}
+                onChange={(e) => setNewEntry({...newEntry, description: e.target.value})}
+                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+              />
+            </div>
+            
+            {selectedProject && newEntry.hours && (
+              <div className="text-sm text-gray-600 mb-2 p-2 bg-blue-50 rounded">
+                <span className="font-medium">Project:</span> {selectedProject.name} | 
+                <span className="font-medium"> Uurtarief:</span> €{(selectedProject.default_rate_cents / 100).toFixed(2)} | 
+                <span className="font-medium"> Bedrag:</span> €{(parseFloat(newEntry.hours || 0) * (selectedProject.default_rate_cents / 100)).toFixed(2)}
+              </div>
+            )}
+          </div>
 
-      {/* Time Entries History */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Time Entries</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {timeEntries.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">No time entries yet</p>
-              <p className="text-sm text-muted-foreground">Start tracking time to see your entries here</p>
+          {/* Time Entries List */}
+          <div className="bg-white rounded-lg shadow-sm border">
+            <div className="p-4 border-b">
+              <h2 className="text-lg font-semibold">Geregistreerde uren</h2>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {timeEntries
-                .filter(entry => entry.end_time) // Only show completed entries
-                .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())
-                .slice(0, 10)
-                .map((entry) => (
-                  <div 
-                    key={entry.id} 
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
-                    data-testid={`row-time-entry-${entry.id}`}
-                  >
-                    <div className="flex-1">
-                      <h4 className="font-medium" data-testid={`text-entry-description-${entry.id}`}>
-                        {entry.description || "Working on task"}
-                      </h4>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span data-testid={`text-entry-date-${entry.id}`}>
-                          {formatDate(entry.start_time)}
-                        </span>
-                        <span data-testid={`text-entry-time-${entry.id}`}>
-                          {formatTime(entry.start_time)} - {entry.end_time && formatTime(entry.end_time)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <div className="font-medium" data-testid={`text-entry-duration-${entry.id}`}>
-                          {formatDuration(entry.minutes)}
-                        </div>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" data-testid={`button-edit-${entry.id}`}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="sm" data-testid={`button-delete-${entry.id}`}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Time Entry</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to delete this time entry? This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction 
-                                onClick={() => deleteEntryMutation.mutate(entry.id)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                data-testid={`button-confirm-delete-${entry.id}`}
-                              >
-                                Delete Entry
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Project</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Fase</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Datum</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Uren</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Omschrijving</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Status</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Acties</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {timeEntries.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
+                        Nog geen uren geregistreerd.
+                      </td>
+                    </tr>
+                  ) : (
+                    timeEntries.map(entry => {
+                      const project = getProjectById(entry.project_id);
+                      const phase = getPhaseByCode(entry.phase_code);
+                      return (
+                        <tr key={entry.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            <div className="font-medium">{project?.name || 'Onbekend'}</div>
+                            <div className="text-sm text-gray-600">{project?.city}</div>
+                          </td>
+                          <td className="px-4 py-3 text-sm">{phase?.name}</td>
+                          <td className="px-4 py-3 text-sm">{new Date(entry.occurred_on).toLocaleDateString('nl-NL')}</td>
+                          <td className="px-4 py-3 text-sm font-mono">{entry.hours?.toFixed(1)}h</td>
+                          <td className="px-4 py-3 text-sm">{entry.notes || '-'}</td>
+                          <td className="px-4 py-3">
+                            {entry.invoiced ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Gefactureerd (€{entry.invoiceAmount})
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                Te factureren (€{project ? (entry.hours * (project.default_rate_cents / 100)).toFixed(2) : '0'})
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => toggleInvoiced(entry.id, project ? entry.hours * (project.default_rate_cents / 100) : 0)}
+                              className="text-blue-600 hover:text-blue-900 text-sm"
+                            >
+                              {entry.invoiced ? 'Markeer als onbetaald' : 'Markeer als gefactureerd'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {viewMode === 'summary' && (
+        <div className="space-y-6">
+          {Object.values(projectSummary).map(summary => (
+            <div key={summary.project.id} className="bg-white rounded-lg shadow-sm border">
+              <div className="p-4 border-b bg-gray-50">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-lg font-semibold">{summary.project.name}</h3>
+                    <p className="text-sm text-gray-600">{summary.project.city} - {summary.project.client_name}</p>
                   </div>
-                ))}
+                  <div className="text-right">
+                    <div className="text-sm text-gray-600">Totaal uren: <span className="font-semibold">{summary.totalHours.toFixed(1)}h</span></div>
+                    <div className="text-sm text-green-600">Gefactureerd: €{summary.totalInvoiced.toFixed(2)}</div>
+                    <div className="text-sm text-yellow-600">Te factureren: €{summary.totalUnbilled.toFixed(2)}</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Fase</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Uren</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Gefactureerd</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Te factureren</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {Object.entries(summary.phases).map(([phaseCode, data]) => {
+                      const phase = getPhaseByCode(phaseCode);
+                      return (
+                        <tr key={phaseCode}>
+                          <td className="px-4 py-3 text-sm font-medium">{phase?.name || phaseCode}</td>
+                          <td className="px-4 py-3 text-sm">{data.hours.toFixed(1)}h</td>
+                          <td className="px-4 py-3 text-sm text-green-600">€{data.invoiced.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-sm text-yellow-600">€{data.unbilled.toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          ))}
+        </div>
+      )}
+
+      {viewMode === 'invoicing' && (
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div className="p-4 border-b">
+            <h2 className="text-lg font-semibold flex items-center">
+              <Euro className="w-5 h-5 mr-2" />
+              Facturatie overzicht
+            </h2>
+          </div>
+          
+          <div className="p-4 space-y-4">
+            {Object.values(projectSummary).map(summary => (
+              <div key={summary.project.id} className="border rounded-lg p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-semibold">{summary.project.name} ({summary.project.city})</h3>
+                  <div className="text-sm text-gray-600">Uurtarief: €{(summary.project.default_rate_cents / 100).toFixed(2)}</div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-blue-50 p-3 rounded">
+                    <div className="text-sm text-blue-600 font-medium">Totaal uren</div>
+                    <div className="text-xl font-bold text-blue-900">{summary.totalHours.toFixed(1)}h</div>
+                  </div>
+                  
+                  <div className="bg-green-50 p-3 rounded">
+                    <div className="text-sm text-green-600 font-medium">Gefactureerd</div>
+                    <div className="text-xl font-bold text-green-900">€{summary.totalInvoiced.toFixed(2)}</div>
+                  </div>
+                  
+                  <div className="bg-yellow-50 p-3 rounded">
+                    <div className="text-sm text-yellow-600 font-medium">Te factureren</div>
+                    <div className="text-xl font-bold text-yellow-900">€{summary.totalUnbilled.toFixed(2)}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+};
+
+export default Time;
