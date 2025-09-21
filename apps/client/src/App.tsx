@@ -7,6 +7,7 @@ const qc = new QueryClient();
 
 export default function App() {
   const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
   const [user, setUser] = React.useState<any>(null);
 
   React.useEffect(() => {
@@ -18,13 +19,11 @@ export default function App() {
   }, []);
 
   async function signIn() {
-    // eenvoudige magic-link login (zet in Supabase Auth → Email templates)
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
-      options: { emailRedirectTo: window.location.origin },
+      password,
     });
     if (error) alert(error.message);
-    else alert("Check je e-mail voor de login link.");
   }
 
   async function signOut() {
@@ -45,6 +44,14 @@ export default function App() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="jij@voorbeeld.nl"
+              className="border px-2 py-1 rounded w-full mb-3"
+            />
+            <label className="block mb-1">Wachtwoord</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Wachtwoord"
               className="border px-2 py-1 rounded w-full"
             />
             <div className="mt-3">
@@ -52,11 +59,8 @@ export default function App() {
                 onClick={signIn}
                 className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
               >
-                Stuur magic link
+                Inloggen
               </button>
-            </div>
-            <div className="text-sm text-gray-600 mt-2">
-              Je krijgt een e-mail met inloglink (Supabase Auth).
             </div>
           </div>
         ) : (
