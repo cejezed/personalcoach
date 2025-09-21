@@ -561,4 +561,4 @@ const ArchitectTimeTracking = () => {
   );
 };
 
-export default Time;
+export default ArchitectTimeTracking;
