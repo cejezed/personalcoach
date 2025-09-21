@@ -16,6 +16,7 @@ import { supabase } from "../lib/supabase";
 const navigation = [
   { name: "Dashboard", href: "/", icon: Home },
   { name: "Time Tracking", href: "/time", icon: Clock },
+   { name: "Projecten", href: "/projecten", icon: FileText },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Budgets", href: "/budgets", icon: DollarSign },
   { name: "Invoices", href: "/invoices", icon: FileText },

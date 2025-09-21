@@ -16,6 +16,8 @@ import Invoices from "./pages/Invoices";
 import Health from "./pages/Health";
 import Coach from "./pages/Coach";
 import Backup from "./pages/Backup";
+import Projecten from "./pages/Projecten";
+
 
 function Router({ user }: { user: User }) {
   return (
@@ -24,6 +26,7 @@ function Router({ user }: { user: User }) {
         <Route path="/" component={Dashboard} />
         <Route path="/tasks" component={Tasks} />
         <Route path="/time" component={Time} />
+         <Route path="/projecten" component={Projecten} />
         <Route path="/budgets" component={Budgets} />
         <Route path="/invoices" component={Invoices} />
         <Route path="/health/*?" component={Health} />
