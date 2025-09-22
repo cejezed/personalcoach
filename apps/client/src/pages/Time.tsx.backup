@@ -1,13 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Calendar, FileText, Euro, Download } from 'lucide-react';
-import { api } from '@/lib/api';
 
 const ArchitectTimeTracking = () => {
-  const queryClient = useQueryClient();
-
-  // Fallback mock data
-  const mockProjects = [
+  const [projects, setProjects] = useState([
     { 
       id: '1', 
       name: 'Villa Waterfront', 
@@ -24,9 +19,9 @@ const ArchitectTimeTracking = () => {
       default_rate_cents: 9500,
       created_at: '2024-02-20'
     }
-  ];
+  ]);
 
-  const mockPhases = [
+  const [phases] = useState([
     { code: 'schetsontwerp', name: 'Schetsontwerp', sort_order: 1 },
     { code: 'voorlopig-ontwerp', name: 'Voorlopig ontwerp', sort_order: 2 },
     { code: 'vo-tekeningen', name: 'VO tekeningen', sort_order: 3 },
@@ -37,91 +32,39 @@ const ArchitectTimeTracking = () => {
     { code: 'uitvoering', name: 'Uitvoering', sort_order: 8 },
     { code: 'uitvoering-tekeningen', name: 'Uitvoering tekeningen', sort_order: 9 },
     { code: 'oplevering-nazorg', name: 'Oplevering/nazorg', sort_order: 10 }
-  ];
+  ]);
 
-  // API calls met fallback
-  const { data: apiProjects = [], isError: projectsError } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => api('/api/projects'),
-    retry: false,
-    staleTime: 5 * 60 * 1000
-  });
-
-  const { data: apiPhases = [], isError: phasesError } = useQuery({
-    queryKey: ['phases'],
-    queryFn: () => api('/api/phases'),
-    retry: false,
-    staleTime: 10 * 60 * 1000
-  });
-
-  const { data: apiTimeEntries = [], refetch: refetchTimeEntries } = useQuery({
-    queryKey: ['time-entries'],
-    queryFn: () => api('/api/time-entries'),
-    retry: false,
-    staleTime: 1 * 60 * 1000
-  });
-
-  // Use API data if available, otherwise fallback to mock data
-  const projects = apiProjects.length > 0 ? apiProjects : mockProjects;
-  const phases = apiPhases.length > 0 ? apiPhases : mockPhases;
-  
-  // Local state for form and time entries
-  const [timeEntries, setTimeEntries] = useState(apiTimeEntries);
-  
-  React.useEffect(() => {
-    if (apiTimeEntries.length > 0) {
-      setTimeEntries(apiTimeEntries);
-    }
-  }, [apiTimeEntries]);
-
-  // Mutations
-  const addProjectMutation = useMutation({
-    mutationFn: (newProject) => api('/api/projects', {
-      method: 'POST',
-      body: JSON.stringify(newProject)
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['projects']);
+  const [timeEntries, setTimeEntries] = useState([
+    {
+      id: '1',
+      project_id: '1',
+      phase_code: 'schetsontwerp',
+      occurred_on: '2024-09-15',
+      hours: 4,
+      notes: 'Eerste schetsen en ruimtelijke opzet',
+      invoiced: false,
+      invoiceAmount: 0
     },
-    onError: (error) => {
-      // Fallback to local state if API fails
-      console.warn('API call failed, using local storage:', error);
+    {
+      id: '2',
+      project_id: '1',
+      phase_code: 'voorlopig-ontwerp',
+      occurred_on: '2024-09-18',
+      hours: 6,
+      notes: 'VO uitwerking plattegronden',
+      invoiced: true,
+      invoiceAmount: 510
     }
-  });
-
-  const addTimeEntryMutation = useMutation({
-    mutationFn: (newEntry) => {
-      // Convert hours to minutes for API
-      const { hours, ...rest } = newEntry;
-      const entryData = { ...rest, minutes: Math.round(parseFloat(hours) * 60) };
-      return api('/api/time-entries', {
-        method: 'POST',
-        body: JSON.stringify(entryData)
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['time-entries']);
-      refetchTimeEntries();
-    },
-    onError: (error, variables) => {
-      // Fallback to local state if API fails
-      console.warn('API call failed, adding to local state:', error);
-      const newEntry = {
-        id: Date.now().toString(),
-        ...variables,
-        project: projects.find(p => p.id === variables.project_id),
-        phase: phases.find(p => p.code === variables.phase_code)
-      };
-      setTimeEntries(prev => [newEntry, ...prev]);
-    }
-  });
+  ]);
 
   const [newEntry, setNewEntry] = useState({
-    project_id: '',
-    phase_code: '',
-    occurred_on: new Date().toISOString().split('T')[0],
+    projectId: '',
+    phaseCode: '',
+    date: new Date().toISOString().split('T')[0],
     hours: '',
-    notes: ''
+    description: '',
+    invoiced: false,
+    invoiceAmount: 0
   });
 
   const [newProject, setNewProject] = useState({
@@ -133,96 +76,100 @@ const ArchitectTimeTracking = () => {
 
   const [showNewProject, setShowNewProject] = useState(false);
   const [viewMode, setViewMode] = useState('entries');
-  const [filterProject, setFilterProject] = useState('');
-  const [filterPeriod, setFilterPeriod] = useState('all');
 
-  const selectedProject = projects.find(p => p.id === newEntry.project_id);
+  const selectedProject = projects.find(p => p.id === newEntry.projectId);
 
   const addProject = () => {
     if (newProject.name && newProject.city && newProject.client_name) {
-      if (!projectsError) {
-        // Try API first
-        addProjectMutation.mutate(newProject);
-      } else {
-        // Fallback to local state
-        const project = { id: Date.now().toString(), ...newProject };
-        setProjects(prev => [project, ...prev]);
-      }
+      const project = {
+        id: Date.now().toString(),
+        ...newProject,
+        created_at: new Date().toISOString().split('T')[0]
+      };
+      setProjects([project, ...projects]);
       setNewProject({ name: '', city: '', client_name: '', default_rate_cents: 8500 });
       setShowNewProject(false);
     }
   };
 
   const addTimeEntry = () => {
-    if (newEntry.project_id && newEntry.phase_code && newEntry.occurred_on && newEntry.hours) {
-      addTimeEntryMutation.mutate(newEntry);
+    if (newEntry.projectId && newEntry.phaseCode && newEntry.date && newEntry.hours) {
+      const entry = {
+        id: Date.now().toString(),
+        project_id: newEntry.projectId,
+        phase_code: newEntry.phaseCode,
+        occurred_on: newEntry.date,
+        hours: parseFloat(newEntry.hours),
+        notes: newEntry.description || null,
+        invoiced: newEntry.invoiced,
+        invoiceAmount: newEntry.invoiced ? newEntry.invoiceAmount : 0
+      };
+
+      setTimeEntries([entry, ...timeEntries]);
       setNewEntry({
-        project_id: '',
-        phase_code: '',
-        occurred_on: new Date().toISOString().split('T')[0],
+        projectId: '',
+        phaseCode: '',
+        date: new Date().toISOString().split('T')[0],
         hours: '',
-        notes: ''
+        description: '',
+        invoiced: false,
+        invoiceAmount: 0
       });
     }
   };
 
-  // Export functionality
+  const toggleInvoiced = (entryId, amount = 0) => {
+    setTimeEntries(timeEntries.map(entry => 
+      entry.id === entryId 
+        ? { ...entry, invoiced: !entry.invoiced, invoiceAmount: !entry.invoiced ? amount : 0 }
+        : entry
+    ));
+  };
+
+  const getProjectById = (id) => projects.find(p => p.id === id);
+  const getPhaseByCode = (code) => phases.find(p => p.code === code);
+
+  // Export function
   const exportToCSV = () => {
-    const headers = ['Project', 'Fase', 'Datum', 'Uren', 'Omschrijving', 'Uurtarief', 'Bedrag'];
-    const rows = timeEntries.map(entry => [
-      entry.projects?.name || entry.project?.name || 'Onbekend',
-      entry.phases?.name || entry.phase?.name || 'Onbekend',
-      entry.occurred_on,
-      (entry.minutes ? entry.minutes / 60 : entry.hours || 0).toFixed(1),
-      entry.notes || '',
-      `€${((entry.projects?.default_rate_cents || entry.project?.default_rate_cents || 0) / 100).toFixed(2)}`,
-      `€${((entry.minutes ? entry.minutes / 60 : entry.hours || 0) * ((entry.projects?.default_rate_cents || entry.project?.default_rate_cents || 0) / 100)).toFixed(2)}`
-    ]);
-
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${cell}"`).join(','))
-      .join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `uurenadministratie-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const csvHeader = 'Datum,Project,Woonplaats,Opdrachtgever,Fase,Uren,Omschrijving,Uurtarief,Bedrag,Status\n';
+    
+    const csvRows = timeEntries.map(entry => {
+      const project = getProjectById(entry.project_id) || {};
+      const phase = getPhaseByCode(entry.phase_code) || {};
+      const rate = (project.default_rate_cents || 0) / 100;
+      const amount = (entry.hours || 0) * rate;
+      
+      return [
+        new Date(entry.occurred_on).toLocaleDateString('nl-NL'),
+        `"${project.name || ''}"`,
+        `"${project.city || ''}"`,
+        `"${project.client_name || ''}"`,
+        `"${phase.name || ''}"`,
+        entry.hours?.toFixed(2) || '0',
+        `"${entry.notes || ''}"`,
+        rate.toFixed(2),
+        amount.toFixed(2),
+        entry.invoiced ? 'Gefactureerd' : 'Open'
+      ].join(',');
+    }).join('\n');
+    
+    const csvContent = csvHeader + csvRows;
+    const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(csvBlob);
+    link.download = `uurenadministratie-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  // Filtered entries
-  const filteredEntries = useMemo(() => {
-    let filtered = timeEntries;
-    
-    if (filterProject) {
-      filtered = filtered.filter(entry => entry.project_id === filterProject);
-    }
-    
-    if (filterPeriod !== 'all') {
-      const now = new Date();
-      filtered = filtered.filter(entry => {
-        const date = new Date(entry.occurred_on);
-        if (filterPeriod === 'week') {
-          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          return date >= weekAgo;
-        } else if (filterPeriod === 'month') {
-          return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-        }
-        return true;
-      });
-    }
-    
-    return filtered;
-  }, [timeEntries, filterProject, filterPeriod]);
-
-  // Project summary
+  // Summary calculations
   const projectSummary = useMemo(() => {
     const summary = {};
     
     timeEntries.forEach(entry => {
-      const project = entry.projects || entry.project;
+      const project = getProjectById(entry.project_id);
       if (!project) return;
       
       if (!summary[entry.project_id]) {
@@ -230,30 +177,34 @@ const ArchitectTimeTracking = () => {
           project,
           phases: {},
           totalHours: 0,
-          totalAmount: 0
+          totalInvoiced: 0,
+          totalUnbilled: 0
         };
       }
-      
-      const hours = entry.minutes ? entry.minutes / 60 : entry.hours || 0;
-      const rate = (project.default_rate_cents || 0) / 100;
-      const amount = hours * rate;
       
       if (!summary[entry.project_id].phases[entry.phase_code]) {
         summary[entry.project_id].phases[entry.phase_code] = {
           hours: 0,
-          amount: 0,
-          phase: entry.phases || entry.phase
+          invoiced: 0,
+          unbilled: 0
         };
       }
       
-      summary[entry.project_id].phases[entry.phase_code].hours += hours;
-      summary[entry.project_id].phases[entry.phase_code].amount += amount;
-      summary[entry.project_id].totalHours += hours;
-      summary[entry.project_id].totalAmount += amount;
+      summary[entry.project_id].phases[entry.phase_code].hours += entry.hours;
+      summary[entry.project_id].totalHours += entry.hours;
+      
+      if (entry.invoiced) {
+        summary[entry.project_id].phases[entry.phase_code].invoiced += entry.invoiceAmount;
+        summary[entry.project_id].totalInvoiced += entry.invoiceAmount;
+      } else {
+        const unbilledAmount = entry.hours * (project.default_rate_cents / 100);
+        summary[entry.project_id].phases[entry.phase_code].unbilled += unbilledAmount;
+        summary[entry.project_id].totalUnbilled += unbilledAmount;
+      }
     });
     
     return summary;
-  }, [timeEntries]);
+  }, [timeEntries, projects]);
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
@@ -273,23 +224,18 @@ const ArchitectTimeTracking = () => {
             Project overzicht
           </button>
           <button
+            onClick={() => setViewMode('invoicing')}
+            className={`px-4 py-2 rounded-lg ${viewMode === 'invoicing' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+          >
+            Facturatie
+          </button>
+          <button
             onClick={exportToCSV}
-            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+            className="px-4 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 flex items-center space-x-2"
           >
             <Download className="w-4 h-4" />
             <span>Export</span>
           </button>
-        </div>
-      </div>
-
-      {/* API Status */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <div className="text-sm text-blue-700">
-          {projectsError ? (
-            <span>⚠️ Backend niet bereikbaar - gebruikt lokale mock data</span>
-          ) : (
-            <span>✅ Verbonden met backend API</span>
-          )}
         </div>
       </div>
 
@@ -323,7 +269,7 @@ const ArchitectTimeTracking = () => {
               type="number"
               placeholder="Uurtarief (eurocent)"
               value={newProject.default_rate_cents}
-              onChange={(e) => setNewProject({...newProject, default_rate_cents: parseInt(e.target.value)})}
+              onChange={(e) => setNewProject({...newProject, default_rate_cents: parseInt(e.target.value) || 0})}
               className="border border-gray-300 rounded-md px-3 py-2"
             />
           </div>
@@ -364,10 +310,10 @@ const ArchitectTimeTracking = () => {
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Project *</label>
                 <select
-                  value={newEntry.project_id}
-                  onChange={(e) => setNewEntry({...newEntry, project_id: e.target.value})}
-                  size="10"
-                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm bg-white h-40 overflow-y-auto"
+                  value={newEntry.projectId}
+                  onChange={(e) => setNewEntry({...newEntry, projectId: e.target.value})}
+                  size="11"
+                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm bg-white min-h-[200px]"
                   required
                 >
                   <option value="">-- Selecteer project --</option>
@@ -382,8 +328,8 @@ const ArchitectTimeTracking = () => {
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Fase *</label>
                 <select
-                  value={newEntry.phase_code}
-                  onChange={(e) => setNewEntry({...newEntry, phase_code: e.target.value})}
+                  value={newEntry.phaseCode}
+                  onChange={(e) => setNewEntry({...newEntry, phaseCode: e.target.value})}
                   size="11"
                   className="w-full border border-gray-300 rounded px-2 py-1 text-sm bg-white min-h-[200px]"
                   required
@@ -402,8 +348,8 @@ const ArchitectTimeTracking = () => {
                 <label className="block text-xs font-medium text-gray-700 mb-1">Datum *</label>
                 <input
                   type="date"
-                  value={newEntry.occurred_on}
-                  onChange={(e) => setNewEntry({...newEntry, occurred_on: e.target.value})}
+                  value={newEntry.date}
+                  onChange={(e) => setNewEntry({...newEntry, date: e.target.value})}
                   className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
                   required
                 />
@@ -426,7 +372,7 @@ const ArchitectTimeTracking = () => {
                 <label className="block text-xs font-medium text-gray-700 mb-1">Actie</label>
                 <button
                   onClick={addTimeEntry}
-                  disabled={!newEntry.project_id || !newEntry.phase_code || !newEntry.occurred_on || !newEntry.hours}
+                  disabled={!newEntry.projectId || !newEntry.phaseCode || !newEntry.date || !newEntry.hours}
                   className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white px-2 py-1 rounded text-sm font-medium h-8"
                 >
                   Toevoegen
@@ -440,8 +386,8 @@ const ArchitectTimeTracking = () => {
               <input
                 type="text"
                 placeholder="Beschrijving van werkzaamheden..."
-                value={newEntry.notes}
-                onChange={(e) => setNewEntry({...newEntry, notes: e.target.value})}
+                value={newEntry.description}
+                onChange={(e) => setNewEntry({...newEntry, description: e.target.value})}
                 className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
               />
             </div>
@@ -455,39 +401,10 @@ const ArchitectTimeTracking = () => {
             )}
           </div>
 
-          {/* Filters */}
-          <div className="bg-white rounded-lg shadow-sm border p-4">
-            <h3 className="text-lg font-semibold mb-4">Filters</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <select
-                value={filterProject}
-                onChange={(e) => setFilterProject(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-2"
-              >
-                <option value="">Alle projecten</option>
-                {projects.map(project => (
-                  <option key={project.id} value={project.id}>
-                    {project.name} ({project.city})
-                  </option>
-                ))}
-              </select>
-              
-              <select
-                value={filterPeriod}
-                onChange={(e) => setFilterPeriod(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-2"
-              >
-                <option value="all">Alle periodes</option>
-                <option value="week">Afgelopen week</option>
-                <option value="month">Deze maand</option>
-              </select>
-            </div>
-          </div>
-
           {/* Time Entries List */}
           <div className="bg-white rounded-lg shadow-sm border">
             <div className="p-4 border-b">
-              <h2 className="text-lg font-semibold">Geregistreerde uren ({filteredEntries.length})</h2>
+              <h2 className="text-lg font-semibold">Geregistreerde uren</h2>
             </div>
             
             <div className="overflow-x-auto">
@@ -498,25 +415,22 @@ const ArchitectTimeTracking = () => {
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Fase</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Datum</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Uren</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Bedrag</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Omschrijving</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Status</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Acties</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {filteredEntries.length === 0 ? (
+                  {timeEntries.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
-                        Geen uren gevonden voor de geselecteerde filters.
+                      <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
+                        Nog geen uren geregistreerd.
                       </td>
                     </tr>
                   ) : (
-                    filteredEntries.map(entry => {
-                      const project = entry.projects || entry.project;
-                      const phase = entry.phases || entry.phase;
-                      const hours = entry.minutes ? entry.minutes / 60 : entry.hours || 0;
-                      const rate = project ? (project.default_rate_cents || 0) / 100 : 0;
-                      const amount = hours * rate;
-                      
+                    timeEntries.map(entry => {
+                      const project = getProjectById(entry.project_id);
+                      const phase = getPhaseByCode(entry.phase_code);
                       return (
                         <tr key={entry.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3">
@@ -525,9 +439,27 @@ const ArchitectTimeTracking = () => {
                           </td>
                           <td className="px-4 py-3 text-sm">{phase?.name}</td>
                           <td className="px-4 py-3 text-sm">{new Date(entry.occurred_on).toLocaleDateString('nl-NL')}</td>
-                          <td className="px-4 py-3 text-sm font-mono">{hours.toFixed(1)}h</td>
-                          <td className="px-4 py-3 text-sm font-mono">€{amount.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-sm font-mono">{entry.hours?.toFixed(1)}h</td>
                           <td className="px-4 py-3 text-sm">{entry.notes || '-'}</td>
+                          <td className="px-4 py-3">
+                            {entry.invoiced ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Gefactureerd (€{entry.invoiceAmount})
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                Te factureren (€{project ? (entry.hours * (project.default_rate_cents / 100)).toFixed(2) : '0'})
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => toggleInvoiced(entry.id, project ? entry.hours * (project.default_rate_cents / 100) : 0)}
+                              className="text-blue-600 hover:text-blue-900 text-sm"
+                            >
+                              {entry.invoiced ? 'Markeer als onbetaald' : 'Markeer als gefactureerd'}
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
@@ -551,7 +483,8 @@ const ArchitectTimeTracking = () => {
                   </div>
                   <div className="text-right">
                     <div className="text-sm text-gray-600">Totaal uren: <span className="font-semibold">{summary.totalHours.toFixed(1)}h</span></div>
-                    <div className="text-sm text-green-600">Totaal bedrag: €{summary.totalAmount.toFixed(2)}</div>
+                    <div className="text-sm text-green-600">Gefactureerd: €{summary.totalInvoiced.toFixed(2)}</div>
+                    <div className="text-sm text-yellow-600">Te factureren: €{summary.totalUnbilled.toFixed(2)}</div>
                   </div>
                 </div>
               </div>
@@ -562,32 +495,70 @@ const ArchitectTimeTracking = () => {
                     <tr>
                       <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Fase</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Uren</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Bedrag</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Gefactureerd</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Te factureren</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {Object.entries(summary.phases).map(([phaseCode, data]) => (
-                      <tr key={phaseCode}>
-                        <td className="px-4 py-3 text-sm font-medium">{data.phase?.name || phaseCode}</td>
-                        <td className="px-4 py-3 text-sm">{data.hours.toFixed(1)}h</td>
-                        <td className="px-4 py-3 text-sm">€{data.amount.toFixed(2)}</td>
-                      </tr>
-                    ))}
+                    {Object.entries(summary.phases).map(([phaseCode, data]) => {
+                      const phase = getPhaseByCode(phaseCode);
+                      return (
+                        <tr key={phaseCode}>
+                          <td className="px-4 py-3 text-sm font-medium">{phase?.name || phaseCode}</td>
+                          <td className="px-4 py-3 text-sm">{data.hours.toFixed(1)}h</td>
+                          <td className="px-4 py-3 text-sm text-green-600">€{data.invoiced.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-sm text-yellow-600">€{data.unbilled.toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {viewMode === 'invoicing' && (
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div className="p-4 border-b">
+            <h2 className="text-lg font-semibold flex items-center">
+              <Euro className="w-5 h-5 mr-2" />
+              Facturatie overzicht
+            </h2>
+          </div>
           
-          {Object.keys(projectSummary).length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              Geen projecten met geregistreerde uren gevonden.
-            </div>
-          )}
+          <div className="p-4 space-y-4">
+            {Object.values(projectSummary).map(summary => (
+              <div key={summary.project.id} className="border rounded-lg p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-semibold">{summary.project.name} ({summary.project.city})</h3>
+                  <div className="text-sm text-gray-600">Uurtarief: €{(summary.project.default_rate_cents / 100).toFixed(2)}</div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-blue-50 p-3 rounded">
+                    <div className="text-sm text-blue-600 font-medium">Totaal uren</div>
+                    <div className="text-xl font-bold text-blue-900">{summary.totalHours.toFixed(1)}h</div>
+                  </div>
+                  
+                  <div className="bg-green-50 p-3 rounded">
+                    <div className="text-sm text-green-600 font-medium">Gefactureerd</div>
+                    <div className="text-xl font-bold text-green-900">€{summary.totalInvoiced.toFixed(2)}</div>
+                  </div>
+                  
+                  <div className="bg-yellow-50 p-3 rounded">
+                    <div className="text-sm text-yellow-600 font-medium">Te factureren</div>
+                    <div className="text-xl font-bold text-yellow-900">€{summary.totalUnbilled.toFixed(2)}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 };
 
-export default ArchitectTimeTracking;
+export default Time;

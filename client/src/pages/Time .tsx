@@ -1,78 +1,29 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Calendar, FileText, Euro, Download } from 'lucide-react';
+import { Plus, Calendar, FileText, Euro, Download, Archive, Edit, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 
 const ArchitectTimeTracking = () => {
   const queryClient = useQueryClient();
 
-  // Fallback mock data
-  const mockProjects = [
-    { 
-      id: '1', 
-      name: 'Villa Waterfront', 
-      city: 'Amstelveen', 
-      client_name: 'Familie Jansen',
-      default_rate_cents: 8500,
-      created_at: '2024-01-15'
-    },
-    { 
-      id: '2', 
-      name: 'Kantoorgebouw Centrum', 
-      city: 'Amsterdam', 
-      client_name: 'BV Vastgoed',
-      default_rate_cents: 9500,
-      created_at: '2024-02-20'
-    }
-  ];
-
-  const mockPhases = [
-    { code: 'schetsontwerp', name: 'Schetsontwerp', sort_order: 1 },
-    { code: 'voorlopig-ontwerp', name: 'Voorlopig ontwerp', sort_order: 2 },
-    { code: 'vo-tekeningen', name: 'VO tekeningen', sort_order: 3 },
-    { code: 'definitief-ontwerp', name: 'Definitief ontwerp', sort_order: 4 },
-    { code: 'do-tekeningen', name: 'DO tekeningen', sort_order: 5 },
-    { code: 'bouwvoorbereiding', name: 'Bouwvoorbereiding', sort_order: 6 },
-    { code: 'bv-tekeningen', name: 'BV tekeningen', sort_order: 7 },
-    { code: 'uitvoering', name: 'Uitvoering', sort_order: 8 },
-    { code: 'uitvoering-tekeningen', name: 'Uitvoering tekeningen', sort_order: 9 },
-    { code: 'oplevering-nazorg', name: 'Oplevering/nazorg', sort_order: 10 }
-  ];
-
-  // API calls met fallback
-  const { data: apiProjects = [], isError: projectsError } = useQuery({
+  // API calls
+  const { data: projects = [], isLoading: projectsLoading, refetch: refetchProjects } = useQuery({
     queryKey: ['projects'],
     queryFn: () => api('/api/projects'),
-    retry: false,
     staleTime: 5 * 60 * 1000
   });
 
-  const { data: apiPhases = [], isError: phasesError } = useQuery({
+  const { data: phases = [], isLoading: phasesLoading } = useQuery({
     queryKey: ['phases'],
     queryFn: () => api('/api/phases'),
-    retry: false,
     staleTime: 10 * 60 * 1000
   });
 
-  const { data: apiTimeEntries = [], refetch: refetchTimeEntries } = useQuery({
+  const { data: timeEntries = [], refetch: refetchTimeEntries } = useQuery({
     queryKey: ['time-entries'],
     queryFn: () => api('/api/time-entries'),
-    retry: false,
     staleTime: 1 * 60 * 1000
   });
-
-  // Use API data if available, otherwise fallback to mock data
-  const projects = apiProjects.length > 0 ? apiProjects : mockProjects;
-  const phases = apiPhases.length > 0 ? apiPhases : mockPhases;
-  
-  // Local state for form and time entries
-  const [timeEntries, setTimeEntries] = useState(apiTimeEntries);
-  
-  React.useEffect(() => {
-    if (apiTimeEntries.length > 0) {
-      setTimeEntries(apiTimeEntries);
-    }
-  }, [apiTimeEntries]);
 
   // Mutations
   const addProjectMutation = useMutation({
@@ -82,16 +33,30 @@ const ArchitectTimeTracking = () => {
     }),
     onSuccess: () => {
       queryClient.invalidateQueries(['projects']);
-    },
-    onError: (error) => {
-      // Fallback to local state if API fails
-      console.warn('API call failed, using local storage:', error);
+    }
+  });
+
+  const updateProjectMutation = useMutation({
+    mutationFn: ({ id, ...data }) => api(`/api/projects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['projects']);
+    }
+  });
+
+  const archiveProjectMutation = useMutation({
+    mutationFn: (id) => api(`/api/projects/${id}`, {
+      method: 'DELETE'
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['projects']);
     }
   });
 
   const addTimeEntryMutation = useMutation({
     mutationFn: (newEntry) => {
-      // Convert hours to minutes for API
       const { hours, ...rest } = newEntry;
       const entryData = { ...rest, minutes: Math.round(parseFloat(hours) * 60) };
       return api('/api/time-entries', {
@@ -101,21 +66,10 @@ const ArchitectTimeTracking = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['time-entries']);
-      refetchTimeEntries();
-    },
-    onError: (error, variables) => {
-      // Fallback to local state if API fails
-      console.warn('API call failed, adding to local state:', error);
-      const newEntry = {
-        id: Date.now().toString(),
-        ...variables,
-        project: projects.find(p => p.id === variables.project_id),
-        phase: phases.find(p => p.code === variables.phase_code)
-      };
-      setTimeEntries(prev => [newEntry, ...prev]);
     }
   });
 
+  // Local state
   const [newEntry, setNewEntry] = useState({
     project_id: '',
     phase_code: '',
@@ -128,9 +82,17 @@ const ArchitectTimeTracking = () => {
     name: '',
     city: '',
     client_name: '',
-    default_rate_cents: 8500
+    hourly_rate: '',
+    phase_rates: {
+      'schetsontwerp': '',
+      'voorlopig-ontwerp': '',
+      'definitief-ontwerp': '',
+      'bouwvoorbereiding': '',
+      'uitvoering': ''
+    }
   });
 
+  const [editingProject, setEditingProject] = useState(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [viewMode, setViewMode] = useState('entries');
   const [filterProject, setFilterProject] = useState('');
@@ -139,17 +101,55 @@ const ArchitectTimeTracking = () => {
   const selectedProject = projects.find(p => p.id === newEntry.project_id);
 
   const addProject = () => {
-    if (newProject.name && newProject.city && newProject.client_name) {
-      if (!projectsError) {
-        // Try API first
-        addProjectMutation.mutate(newProject);
-      } else {
-        // Fallback to local state
-        const project = { id: Date.now().toString(), ...newProject };
-        setProjects(prev => [project, ...prev]);
-      }
-      setNewProject({ name: '', city: '', client_name: '', default_rate_cents: 8500 });
+    if (newProject.name && newProject.city && newProject.client_name && newProject.hourly_rate) {
+      const projectData = {
+        ...newProject,
+        hourly_rate: parseFloat(newProject.hourly_rate),
+        phase_rates: Object.fromEntries(
+          Object.entries(newProject.phase_rates)
+            .filter(([_, value]) => value !== '')
+            .map(([key, value]) => [key, parseFloat(value)])
+        )
+      };
+      
+      addProjectMutation.mutate(projectData);
+      setNewProject({
+        name: '',
+        city: '',
+        client_name: '',
+        hourly_rate: '',
+        phase_rates: {
+          'schetsontwerp': '',
+          'voorlopig-ontwerp': '',
+          'definitief-ontwerp': '',
+          'bouwvoorbereiding': '',
+          'uitvoering': ''
+        }
+      });
       setShowNewProject(false);
+    }
+  };
+
+  const updateProject = () => {
+    if (editingProject && editingProject.name && editingProject.city && editingProject.client_name && editingProject.hourly_rate) {
+      const projectData = {
+        ...editingProject,
+        hourly_rate: parseFloat(editingProject.hourly_rate),
+        phase_rates: Object.fromEntries(
+          Object.entries(editingProject.phase_rates || {})
+            .filter(([_, value]) => value !== '')
+            .map(([key, value]) => [key, parseFloat(value)])
+        )
+      };
+      
+      updateProjectMutation.mutate({ id: editingProject.id, ...projectData });
+      setEditingProject(null);
+    }
+  };
+
+  const archiveProject = (id) => {
+    if (window.confirm('Weet je zeker dat je dit project wilt archiveren?')) {
+      archiveProjectMutation.mutate(id);
     }
   };
 
@@ -166,18 +166,38 @@ const ArchitectTimeTracking = () => {
     }
   };
 
+  // Calculate rate for selected project and phase
+  const getEffectiveRate = (project, phaseCode) => {
+    if (!project) return 0;
+    
+    // Check if there's a specific rate for this phase
+    const phaseRate = project.phase_rates?.[phaseCode];
+    if (phaseRate) return phaseRate;
+    
+    // Fall back to hourly rate
+    return project.hourly_rate || 0;
+  };
+
   // Export functionality
   const exportToCSV = () => {
     const headers = ['Project', 'Fase', 'Datum', 'Uren', 'Omschrijving', 'Uurtarief', 'Bedrag'];
-    const rows = timeEntries.map(entry => [
-      entry.projects?.name || entry.project?.name || 'Onbekend',
-      entry.phases?.name || entry.phase?.name || 'Onbekend',
-      entry.occurred_on,
-      (entry.minutes ? entry.minutes / 60 : entry.hours || 0).toFixed(1),
-      entry.notes || '',
-      `€${((entry.projects?.default_rate_cents || entry.project?.default_rate_cents || 0) / 100).toFixed(2)}`,
-      `€${((entry.minutes ? entry.minutes / 60 : entry.hours || 0) * ((entry.projects?.default_rate_cents || entry.project?.default_rate_cents || 0) / 100)).toFixed(2)}`
-    ]);
+    const rows = timeEntries.map(entry => {
+      const project = entry.projects || entry.project;
+      const phase = entry.phases || entry.phase;
+      const hours = entry.minutes ? entry.minutes / 60 : entry.hours || 0;
+      const rate = getEffectiveRate(project, entry.phase_code);
+      const amount = hours * rate;
+      
+      return [
+        project?.name || 'Onbekend',
+        phase?.name || 'Onbekend',
+        entry.occurred_on,
+        hours.toFixed(1),
+        entry.notes || '',
+        `€${rate.toFixed(2)}`,
+        `€${amount.toFixed(2)}`
+      ];
+    });
 
     const csvContent = [headers, ...rows]
       .map(row => row.map(cell => `"${cell}"`).join(','))
@@ -235,14 +255,15 @@ const ArchitectTimeTracking = () => {
       }
       
       const hours = entry.minutes ? entry.minutes / 60 : entry.hours || 0;
-      const rate = (project.default_rate_cents || 0) / 100;
+      const rate = getEffectiveRate(project, entry.phase_code);
       const amount = hours * rate;
       
       if (!summary[entry.project_id].phases[entry.phase_code]) {
         summary[entry.project_id].phases[entry.phase_code] = {
           hours: 0,
           amount: 0,
-          phase: entry.phases || entry.phase
+          phase: entry.phases || entry.phase,
+          rate: rate
         };
       }
       
@@ -255,6 +276,16 @@ const ArchitectTimeTracking = () => {
     return summary;
   }, [timeEntries]);
 
+  if (projectsLoading || phasesLoading) {
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="flex items-center justify-center py-8">
+          <div className="text-gray-500">Gegevens laden...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -265,6 +296,12 @@ const ArchitectTimeTracking = () => {
             className={`px-4 py-2 rounded-lg ${viewMode === 'entries' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
           >
             Uren invoer
+          </button>
+          <button
+            onClick={() => setViewMode('projects')}
+            className={`px-4 py-2 rounded-lg ${viewMode === 'projects' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+          >
+            Projecten
           </button>
           <button
             onClick={() => setViewMode('summary')}
@@ -279,17 +316,6 @@ const ArchitectTimeTracking = () => {
             <Download className="w-4 h-4" />
             <span>Export</span>
           </button>
-        </div>
-      </div>
-
-      {/* API Status */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <div className="text-sm text-blue-700">
-          {projectsError ? (
-            <span>⚠️ Backend niet bereikbaar - gebruikt lokale mock data</span>
-          ) : (
-            <span>✅ Verbonden met backend API</span>
-          )}
         </div>
       </div>
 
@@ -321,18 +347,44 @@ const ArchitectTimeTracking = () => {
             />
             <input
               type="number"
-              placeholder="Uurtarief (eurocent)"
-              value={newProject.default_rate_cents}
-              onChange={(e) => setNewProject({...newProject, default_rate_cents: parseInt(e.target.value)})}
+              placeholder="Standaard uurtarief (€)"
+              value={newProject.hourly_rate}
+              onChange={(e) => setNewProject({...newProject, hourly_rate: e.target.value})}
               className="border border-gray-300 rounded-md px-3 py-2"
             />
           </div>
+          
+          <div className="mb-4">
+            <h3 className="text-md font-medium mb-2">Vaste bedragen per fase (optioneel)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              {Object.entries(newProject.phase_rates).map(([phaseCode, value]) => {
+                const phaseName = phases.find(p => p.code === phaseCode)?.name || phaseCode;
+                return (
+                  <div key={phaseCode}>
+                    <label className="block text-sm text-gray-700 mb-1">{phaseName}</label>
+                    <input
+                      type="number"
+                      placeholder="€"
+                      value={value}
+                      onChange={(e) => setNewProject({
+                        ...newProject,
+                        phase_rates: { ...newProject.phase_rates, [phaseCode]: e.target.value }
+                      })}
+                      className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          
           <div className="flex space-x-2">
             <button
               onClick={addProject}
+              disabled={addProjectMutation.isLoading}
               className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg"
             >
-              Project toevoegen
+              {addProjectMutation.isLoading ? 'Toevoegen...' : 'Project toevoegen'}
             </button>
             <button
               onClick={() => setShowNewProject(false)}
@@ -340,6 +392,161 @@ const ArchitectTimeTracking = () => {
             >
               Annuleren
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Project Form */}
+      {editingProject && (
+        <div className="bg-white rounded-lg shadow-sm border p-4">
+          <h2 className="text-lg font-semibold mb-4">Project bewerken</h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <input
+              type="text"
+              placeholder="Projectnaam"
+              value={editingProject.name}
+              onChange={(e) => setEditingProject({...editingProject, name: e.target.value})}
+              className="border border-gray-300 rounded-md px-3 py-2"
+            />
+            <input
+              type="text"
+              placeholder="Woonplaats"
+              value={editingProject.city}
+              onChange={(e) => setEditingProject({...editingProject, city: e.target.value})}
+              className="border border-gray-300 rounded-md px-3 py-2"
+            />
+            <input
+              type="text"
+              placeholder="Opdrachtgever"
+              value={editingProject.client_name}
+              onChange={(e) => setEditingProject({...editingProject, client_name: e.target.value})}
+              className="border border-gray-300 rounded-md px-3 py-2"
+            />
+            <input
+              type="number"
+              placeholder="Standaard uurtarief (€)"
+              value={editingProject.hourly_rate}
+              onChange={(e) => setEditingProject({...editingProject, hourly_rate: e.target.value})}
+              className="border border-gray-300 rounded-md px-3 py-2"
+            />
+          </div>
+          
+          <div className="mb-4">
+            <h3 className="text-md font-medium mb-2">Vaste bedragen per fase</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              {['schetsontwerp', 'voorlopig-ontwerp', 'definitief-ontwerp', 'bouwvoorbereiding', 'uitvoering'].map(phaseCode => {
+                const phaseName = phases.find(p => p.code === phaseCode)?.name || phaseCode;
+                const value = editingProject.phase_rates?.[phaseCode] || '';
+                return (
+                  <div key={phaseCode}>
+                    <label className="block text-sm text-gray-700 mb-1">{phaseName}</label>
+                    <input
+                      type="number"
+                      placeholder="€"
+                      value={value}
+                      onChange={(e) => setEditingProject({
+                        ...editingProject,
+                        phase_rates: { ...editingProject.phase_rates, [phaseCode]: e.target.value }
+                      })}
+                      className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          
+          <div className="flex space-x-2">
+            <button
+              onClick={updateProject}
+              disabled={updateProjectMutation.isLoading}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
+            >
+              {updateProjectMutation.isLoading ? 'Opslaan...' : 'Wijzigingen opslaan'}
+            </button>
+            <button
+              onClick={() => setEditingProject(null)}
+              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
+            >
+              Annuleren
+            </button>
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'projects' && (
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div className="p-4 border-b">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-semibold">Projecten beheer</h2>
+              <button
+                onClick={() => setShowNewProject(true)}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Nieuw project</span>
+              </button>
+            </div>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Project</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Locatie</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Opdrachtgever</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Uurtarief</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Vaste bedragen</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Acties</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {projects.map(project => (
+                  <tr key={project.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{project.name}</div>
+                    </td>
+                    <td className="px-4 py-3 text-sm">{project.city}</td>
+                    <td className="px-4 py-3 text-sm">{project.client_name}</td>
+                    <td className="px-4 py-3 text-sm">€{project.hourly_rate?.toFixed(2) || '0.00'}</td>
+                    <td className="px-4 py-3 text-sm">
+                      {project.phase_rates && Object.keys(project.phase_rates).length > 0 ? (
+                        <div className="text-xs">
+                          {Object.entries(project.phase_rates).map(([phase, rate]) => (
+                            <div key={phase}>{phases.find(p => p.code === phase)?.name}: €{rate}</div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">Geen vaste bedragen</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => setEditingProject({
+                            ...project,
+                            hourly_rate: project.hourly_rate?.toString() || '',
+                            phase_rates: project.phase_rates || {}
+                          })}
+                          className="text-blue-600 hover:text-blue-900"
+                          title="Bewerken"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => archiveProject(project.id)}
+                          className="text-red-600 hover:text-red-900"
+                          title="Archiveren"
+                        >
+                          <Archive className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -426,10 +633,10 @@ const ArchitectTimeTracking = () => {
                 <label className="block text-xs font-medium text-gray-700 mb-1">Actie</label>
                 <button
                   onClick={addTimeEntry}
-                  disabled={!newEntry.project_id || !newEntry.phase_code || !newEntry.occurred_on || !newEntry.hours}
+                  disabled={!newEntry.project_id || !newEntry.phase_code || !newEntry.occurred_on || !newEntry.hours || addTimeEntryMutation.isLoading}
                   className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white px-2 py-1 rounded text-sm font-medium h-8"
                 >
-                  Toevoegen
+                  {addTimeEntryMutation.isLoading ? 'Bezig...' : 'Toevoegen'}
                 </button>
               </div>
             </div>
@@ -446,11 +653,14 @@ const ArchitectTimeTracking = () => {
               />
             </div>
             
-            {selectedProject && newEntry.hours && (
+            {selectedProject && newEntry.phase_code && newEntry.hours && (
               <div className="text-sm text-gray-600 mb-2 p-2 bg-blue-50 rounded">
                 <span className="font-medium">Project:</span> {selectedProject.name} | 
-                <span className="font-medium"> Uurtarief:</span> €{(selectedProject.default_rate_cents / 100).toFixed(2)} | 
-                <span className="font-medium"> Bedrag:</span> €{(parseFloat(newEntry.hours || 0) * (selectedProject.default_rate_cents / 100)).toFixed(2)}
+                <span className="font-medium"> Tarief:</span> €{getEffectiveRate(selectedProject, newEntry.phase_code).toFixed(2)} | 
+                <span className="font-medium"> Bedrag:</span> €{(parseFloat(newEntry.hours || 0) * getEffectiveRate(selectedProject, newEntry.phase_code)).toFixed(2)}
+                {selectedProject.phase_rates?.[newEntry.phase_code] && (
+                  <span className="text-blue-600"> (vast bedrag)</span>
+                )}
               </div>
             )}
           </div>
@@ -498,6 +708,7 @@ const ArchitectTimeTracking = () => {
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Fase</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Datum</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Uren</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Tarief</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Bedrag</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Omschrijving</th>
                   </tr>
@@ -505,7 +716,7 @@ const ArchitectTimeTracking = () => {
                 <tbody className="divide-y divide-gray-200">
                   {filteredEntries.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
                         Geen uren gevonden voor de geselecteerde filters.
                       </td>
                     </tr>
@@ -514,7 +725,7 @@ const ArchitectTimeTracking = () => {
                       const project = entry.projects || entry.project;
                       const phase = entry.phases || entry.phase;
                       const hours = entry.minutes ? entry.minutes / 60 : entry.hours || 0;
-                      const rate = project ? (project.default_rate_cents || 0) / 100 : 0;
+                      const rate = getEffectiveRate(project, entry.phase_code);
                       const amount = hours * rate;
                       
                       return (
@@ -526,6 +737,12 @@ const ArchitectTimeTracking = () => {
                           <td className="px-4 py-3 text-sm">{phase?.name}</td>
                           <td className="px-4 py-3 text-sm">{new Date(entry.occurred_on).toLocaleDateString('nl-NL')}</td>
                           <td className="px-4 py-3 text-sm font-mono">{hours.toFixed(1)}h</td>
+                          <td className="px-4 py-3 text-sm font-mono">
+                            €{rate.toFixed(2)}
+                            {project?.phase_rates?.[entry.phase_code] && (
+                              <span className="text-blue-600 ml-1">(vast)</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-sm font-mono">€{amount.toFixed(2)}</td>
                           <td className="px-4 py-3 text-sm">{entry.notes || '-'}</td>
                         </tr>
@@ -562,6 +779,7 @@ const ArchitectTimeTracking = () => {
                     <tr>
                       <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Fase</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Uren</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Tarief</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Bedrag</th>
                     </tr>
                   </thead>
@@ -570,6 +788,12 @@ const ArchitectTimeTracking = () => {
                       <tr key={phaseCode}>
                         <td className="px-4 py-3 text-sm font-medium">{data.phase?.name || phaseCode}</td>
                         <td className="px-4 py-3 text-sm">{data.hours.toFixed(1)}h</td>
+                        <td className="px-4 py-3 text-sm">
+                          €{data.rate?.toFixed(2)}
+                          {summary.project.phase_rates?.[phaseCode] && (
+                            <span className="text-blue-600 ml-1">(vast)</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-sm">€{data.amount.toFixed(2)}</td>
                       </tr>
                     ))}
