@@ -9,34 +9,31 @@ const supabase = createClient(
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
     const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('archived', false);
+      .from('time_entries')
+      .select(`
+        *,
+        projects (name, city, client_name, default_rate_cents),
+        phases (name)
+      `)
+      .order('occurred_on', { ascending: false });
     
     if (error) return res.status(500).json({ error: error.message });
     res.status(200).json(data);
-  } 
+  }
   
   else if (req.method === 'POST') {
     const { data, error } = await supabase
-      .from('projects')
+      .from('time_entries')
       .insert([req.body])
-      .select()
+      .select(`
+        *,
+        projects (name, city, client_name, default_rate_cents),
+        phases (name)
+      `)
       .single();
     
     if (error) return res.status(500).json({ error: error.message });
     res.status(201).json(data);
-  }
-  
-  else if (req.method === 'DELETE') {
-    const id = req.query.id;
-    const { error } = await supabase
-      .from('projects')
-      .update({ archived: true })
-      .eq('id', id);
-    
-    if (error) return res.status(500).json({ error: error.message });
-    res.status(200).json({ success: true });
   }
   
   else {
