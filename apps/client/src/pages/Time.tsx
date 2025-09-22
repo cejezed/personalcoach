@@ -1,3 +1,10 @@
+cd apps/client
+
+# Backup huidige versie
+cp src/pages/Time.tsx src/pages/Time.tsx.backup
+
+# Update Time.tsx
+cat > src/pages/Time.tsx << 'EOF'
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Calendar, FileText, Euro, Download } from 'lucide-react';
@@ -591,3 +598,4 @@ const ArchitectTimeTracking = () => {
 };
 
 export default ArchitectTimeTracking;
+EOF
