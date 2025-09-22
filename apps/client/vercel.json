@@ -1,8 +1,14 @@
 {
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://personalcoach-kw6jnhsfj-jules-projects-63d12bd8.vercel.app/api/$1"
+      "destination": "https://personalcoach-q3xuc2yg6-jules-projects-63d12bd8.vercel.app/api/$1"
     }
+  ],
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }

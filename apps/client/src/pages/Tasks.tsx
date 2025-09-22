@@ -10,11 +10,11 @@ type FilterType = "all" | "active" | "completed";
 interface Task {
   id: string;
   title: string;
-  notes?: string;
+  notes?: string | null;
   status: TaskStatus;
   priority: number;
-  due_date?: string;
-  project_id?: string;
+  due_date?: string | null;
+  project_id?: string | null;
   type: TaskType;
   created_at: string;
   projects?: {
@@ -27,48 +27,51 @@ interface Task {
 const Tasks = () => {
   const queryClient = useQueryClient();
   
-  // API calls
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
+  // API calls (met auth + relatieve paden)
+  const { data: tasks = [], isLoading: tasksLoading, isError: tasksError, error } = useQuery({
     queryKey: ['tasks'],
-    queryFn: () => api('/api/tasks'),
+    queryFn: () => api<Task[]>('/api/tasks', {}, { withAuth: true }),
     staleTime: 2 * 60 * 1000
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => api('/api/projects'),
+    queryFn: () => api<any[]>('/api/projects', {}, { withAuth: true }),
     staleTime: 5 * 60 * 1000
   });
 
-  // Mutations
+  // Mutations (ook met auth)
   const addTaskMutation = useMutation({
-    mutationFn: (newTask) => api('/api/tasks', {
-      method: 'POST',
-      body: JSON.stringify(newTask)
-    }),
+    mutationFn: (newTask: Partial<Task>) =>
+      api<Task>('/api/tasks', {
+        method: 'POST',
+        body: JSON.stringify(newTask)
+      }, { withAuth: true }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['tasks']);
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
       setFormData({ title: "", notes: "", project_id: "", priority: 3, due_date: "", type: "work" });
       setShowCreateDialog(false);
     }
   });
 
   const updateTaskMutation = useMutation({
-    mutationFn: ({ id, ...data }) => api(`/api/tasks/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data)
-    }),
+    mutationFn: ({ id, ...data }: Partial<Task> & { id: string }) =>
+      api<Task>(`/api/tasks/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data)
+      }, { withAuth: true }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['tasks']);
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
     }
   });
 
   const deleteTaskMutation = useMutation({
-    mutationFn: (id) => api(`/api/tasks/${id}`, {
-      method: 'DELETE'
-    }),
+    mutationFn: (id: string) =>
+      api<null>(`/api/tasks/${id}`, {
+        method: 'DELETE'
+      }, { withAuth: true }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['tasks']);
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
     }
   });
 
@@ -97,26 +100,24 @@ const Tasks = () => {
     return true;
   });
 
-  // Calculate statistics
-  const activeWorkTasks = tasks.filter((task: Task) => task.type === "work" && task.status !== "done").length;
-  const activePersonalTasks = tasks.filter((task: Task) => task.type === "personal" && task.status !== "done").length;
-  const inProgressTasks = tasks.filter((task: Task) => task.status === "in_progress").length;
-  const overdueTasks = tasks.filter((task: Task) => 
-    task.due_date && new Date(task.due_date) < new Date() && task.status !== "done"
+  // Statistics
+  const activeWorkTasks = tasks.filter((t: Task) => t.type === "work" && t.status !== "done").length;
+  const activePersonalTasks = tasks.filter((t: Task) => t.type === "personal" && t.status !== "done").length;
+  const inProgressTasks = tasks.filter((t: Task) => t.status === "in_progress").length;
+  const overdueTasks = tasks.filter((t: Task) =>
+    t.due_date && new Date(t.due_date) < new Date() && t.status !== "done"
   ).length;
 
   const handleCreateTask = () => {
     if (!formData.title.trim()) return;
-    
     const newTask = {
       ...formData,
-      priority: parseInt(formData.priority.toString()),
+      priority: Number(formData.priority),
       status: "todo" as TaskStatus,
       project_id: formData.project_id || null,
       due_date: formData.due_date || null,
       notes: formData.notes || null
     };
-    
     addTaskMutation.mutate(newTask);
   };
 
@@ -143,16 +144,14 @@ const Tasks = () => {
 
   const handleEditTask = () => {
     if (!editingTask || !formData.title.trim()) return;
-    
-    const updates = {
+    const updates: Partial<Task> = {
       title: formData.title,
       notes: formData.notes || null,
       project_id: formData.project_id || null,
-      priority: parseInt(formData.priority.toString()),
+      priority: Number(formData.priority),
       due_date: formData.due_date || null,
       type: formData.type
     };
-    
     handleUpdateTask(editingTask.id, updates);
     setEditingTask(null);
     setFormData({ title: "", notes: "", project_id: "", priority: 3, due_date: "", type: "work" });
@@ -185,6 +184,14 @@ const Tasks = () => {
         <div className="flex items-center justify-center py-8">
           <div className="text-gray-500">Taken laden...</div>
         </div>
+      </div>
+    );
+  }
+
+  if (tasksError) {
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="text-red-600">Kon taken niet laden: {(error as Error)?.message || 'Onbekende fout'}</div>
       </div>
     );
   }
