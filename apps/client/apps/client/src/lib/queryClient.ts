@@ -1,18 +1,16 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient } from '@tanstack/react-query';
 
+// Query client voor React Query
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-      staleTime: 30_000,
-    },
-    mutations: {
-      retry: 0,
+      staleTime: 5 * 60 * 1000, // 5 minuten
+      cacheTime: 10 * 60 * 1000, // 10 minuten
     },
   },
 });
 
+// API request helper functie
 export const apiRequest = async (url: string, options?: RequestInit) => {
   const response = await fetch(`/api${url}`, {
     headers: {
