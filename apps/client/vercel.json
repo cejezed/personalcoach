@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://personalcoach-kw6jnhsfj-jules-projects-63d12bd8.vercel.app/api/$1"
+    }
+  ]
+}
