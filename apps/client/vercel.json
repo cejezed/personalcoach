@@ -1,7 +1,15 @@
 {
-  "functions": {
-    "api/*.ts": {
-      "runtime": "@vercel/node@3.0.7"
+  "version": 2,
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://personalcoach-black.vercel.app/api/:path*"
     }
-  }
+  ],
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }
