@@ -41,7 +41,7 @@ import type {
   InsertSteps,
   EnergyCheck,
   InsertEnergyCheck,
-} from "@shared/schema";
+} from "@/types/schema";
 
 /* ----------------------------- Workouts Tab ----------------------------- */
 
