@@ -2,10 +2,15 @@
   "name": "personalcoach-client",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
+  "packageManager": "pnpm@9.12.3",
   "scripts": {
     "dev": "vite --port 5173",
     "build": "vite build",
-    "preview": "vite preview --port 5173"
+    "preview": "vite preview --port 5173",
+    "vercel-build": "pnpm exec vite build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
