@@ -1,24 +1,21 @@
 {
-  "include": ["client/src/**/*", "shared/**/*", "server/**/*", "api/**/*"],
-  "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
+  "files": [],
+  "references": [
+    { "path": "apps/client" },
+    { "path": "apps/server" }
+  ],
   "compilerOptions": {
-    "incremental": true,
-    "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
-    "target": "es2020",
-    "module": "CommonJS",
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": true,
-    "lib": ["es2020", "dom", "dom.iterable"],
-    "jsx": "preserve",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "moduleResolution": "node",
+    "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
-    "types": ["node", "vite/client"],
     "paths": {
-      "@/*": ["./client/src/*"],
-      "@shared/*": ["./shared/*"]
-    },
-    "declaration": false,
-    "outDir": "./dist"
+      "@/*": ["apps/client/src/*"],
+      "@shared/*": ["packages/shared/*"]
+    }
   }
 }
