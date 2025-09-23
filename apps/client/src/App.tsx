@@ -1,7 +1,8 @@
 // apps/client/src/App.tsx
 import { useEffect, useState } from "react";
-import { Switch, Route } from "wouter";
 import type { User } from "@supabase/supabase-js";
+
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
@@ -24,28 +25,35 @@ import Backup from "@/pages/Backup";
 // Toggle: gebruik mock user tijdens development (snel testen zonder echte login)
 const USE_MOCK_AUTH = true;
 
-function Router({ user }: { user: User }) {
+function AppRoutes({ user }: { user: User }) {
   return (
     <Layout user={user}>
-      <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/tasks" component={Tasks} />
-        <Route path="/time" component={Time} />
-        <Route path="/budgets" component={Budgets} />
-        <Route path="/invoices" component={Invoices} />
-        {/* wouter catch-all: als je subroutes hebt kun je ook <Route path="/health/:rest*" .../> gebruiken */}
-        <Route path="/health/*?" component={Health} />
-        <Route path="/coach" component={Coach} />
-        <Route path="/backup" component={Backup} />
-        <Route path="*">
-          <div className="min-h-screen flex items-center justify-center bg-background">
-            <div className="text-center">
-              <h1 className="text-2xl font-bold text-foreground mb-2">404 - Page Not Found</h1>
-              <p className="text-muted-foreground">The page you're looking for doesn't exist.</p>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/tasks" element={<Tasks />} />
+        <Route path="/time" element={<Time />} />
+        <Route path="/budgets" element={<Budgets />} />
+        <Route path="/invoices" element={<Invoices />} />
+        {/* RRD v6 wildcard voor eventuele subroutes onder /health */}
+        <Route path="/health/*" element={<Health />} />
+        <Route path="/coach" element={<Coach />} />
+        <Route path="/backup" element={<Backup />} />
+        <Route
+          path="*"
+          element={
+            <div className="min-h-screen flex items-center justify-center bg-background">
+              <div className="text-center">
+                <h1 className="text-2xl font-bold text-foreground mb-2">
+                  404 - Page Not Found
+                </h1>
+                <p className="text-muted-foreground">
+                  The page you're looking for doesn't exist.
+                </p>
+              </div>
             </div>
-          </div>
-        </Route>
-      </Switch>
+          }
+        />
+      </Routes>
     </Layout>
   );
 }
@@ -89,7 +97,9 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router user={effectiveUser} />
+        <BrowserRouter>
+          <AppRoutes user={effectiveUser} />
+        </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
   );

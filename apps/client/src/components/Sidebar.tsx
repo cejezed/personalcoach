@@ -1,33 +1,34 @@
-import { Link, useLocation } from "wouter";
-import { 
-  Home, 
-  Clock, 
-  CheckSquare, 
-  DollarSign, 
-  FileText, 
-  Heart, 
-  Bot, 
+// apps/client/src/components/Sidebar.tsx
+import { NavLink, useLocation } from "react-router-dom";
+import {
+  Home,
+  Clock,
+  CheckSquare,
+  DollarSign,
+  FileText,
+  Heart,
+  Bot,
   Download,
   BarChart3,
   User,
-  Folder
+  Folder,
 } from "lucide-react";
-import { supabase } from "../lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 const navigation = [
-  { name: "Dashboard", href: "/", icon: Home },
-  { name: "Time Tracking", href: "/time", icon: Clock },
-  { name: "Tasks", href: "/tasks", icon: CheckSquare },
-    { name: "Projecten", href: "/projecten", icon: Folder },
-  { name: "Budgets", href: "/budgets", icon: DollarSign },
-  { name: "Invoices", href: "/invoices", icon: FileText },
-  { name: "Health", href: "/health", icon: Heart },
-  { name: "Coach", href: "/coach", icon: Bot },
-  { name: "Backup", href: "/backup", icon: Download },
+  { name: "Dashboard", to: "/", icon: Home },
+  { name: "Time Tracking", to: "/time", icon: Clock },
+  { name: "Tasks", to: "/tasks", icon: CheckSquare },
+  { name: "Projecten", to: "/projecten", icon: Folder },
+  { name: "Budgets", to: "/budgets", icon: DollarSign },
+  { name: "Invoices", to: "/invoices", icon: FileText },
+  { name: "Health", to: "/health", icon: Heart },
+  { name: "Coach", to: "/coach", icon: Bot },
+  { name: "Backup", to: "/backup", icon: Download },
 ];
 
 export default function Sidebar() {
-  const [location] = useLocation();
+  const location = useLocation();
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -44,34 +45,36 @@ export default function Sidebar() {
             <span className="text-xl font-semibold text-foreground">Coach App</span>
           </div>
         </div>
+
         <nav className="flex flex-1 flex-col">
           <ul role="list" className="flex flex-1 flex-col gap-y-7">
             <li>
               <ul role="list" className="-mx-2 space-y-1">
                 {navigation.map((item) => {
-                  const isActive = location === item.href || 
-                    (item.href !== "/" && location.startsWith(item.href));
                   const Icon = item.icon;
-                  
                   return (
                     <li key={item.name}>
-                      <Link
-                        href={item.href}
-                        className={`group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-medium ${
-                          isActive
-                            ? "bg-secondary text-secondary-foreground"
-                            : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                        }`}
-                        data-testid={`link-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+                      <NavLink
+                        to={item.to}
+                        end={item.to === "/"}
+                        className={({ isActive }) =>
+                          `group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-medium ${
+                            isActive
+                              ? "bg-secondary text-secondary-foreground"
+                              : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                          }`
+                        }
+                        data-testid={`link-${item.name.toLowerCase().replace(/\s+/g, "-")}`}
                       >
                         <Icon className="h-4 w-4 shrink-0" />
                         {item.name}
-                      </Link>
+                      </NavLink>
                     </li>
                   );
                 })}
               </ul>
             </li>
+
             <li className="mt-auto">
               <div className="flex items-center justify-between px-2 py-3 text-sm font-medium leading-6 text-muted-foreground">
                 <div className="flex items-center gap-x-3">
