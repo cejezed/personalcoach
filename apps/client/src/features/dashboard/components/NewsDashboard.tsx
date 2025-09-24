@@ -14,6 +14,12 @@ type NewsItem = {
 type NewsTab = 'general' | 'automotive' | 'ai-video';
 
 const NewsDashboard: React.FC = () => {
+  // Tijdelijk uitgeschakeld
+  return (
+    <div className="p-6 text-center text-muted-foreground">
+      Nieuws-dashboard is tijdelijk uitgeschakeld.
+    </div>
+  );
   const [activeTab, setActiveTab] = useState<NewsTab>('general');
   const [news, setNews] = useState<Record<NewsTab, NewsItem[]>>({
     general: [],
