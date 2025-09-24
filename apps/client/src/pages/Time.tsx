@@ -124,27 +124,29 @@ export default function Time() {
   const [projectSearch, setProjectSearch] = React.useState("");
 
   const activeProjects = React.useMemo(
-    () => projects.filter((p) => !(p.archived || p.archived_at || p.is_archived)),
+    () => Array.isArray(projects) ? projects.filter((p) => !(p.archived || p.archived_at || p.is_archived)) : [],
     [projects]
   );
   const archivedProjects = React.useMemo(
-    () => projects.filter((p) => (p.archived || p.archived_at || p.is_archived)),
+    () => Array.isArray(projects) ? projects.filter((p) => (p.archived || p.archived_at || p.is_archived)) : [],
     [projects]
   );
   const selectableProjects = showArchived ? archivedProjects : activeProjects;
 
   const visibleProjects = React.useMemo(() => {
     const q = projectSearch.trim().toLowerCase();
-    if (!q) return selectableProjects;
-    return selectableProjects.filter((p) =>
-      [p.name, p.city, p.client_name]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q))
-    );
+    if (!q) return Array.isArray(selectableProjects) ? selectableProjects : [];
+    return Array.isArray(selectableProjects)
+      ? selectableProjects.filter((p) =>
+          [p.name, p.city, p.client_name]
+            .filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(q))
+        )
+      : [];
   }, [selectableProjects, projectSearch]);
 
   const selectedProject = React.useMemo(
-    () => projects.find((p) => p.id === form.project_id),
+    () => (Array.isArray(projects) ? projects.find((p) => p.id === form.project_id) : undefined),
     [projects, form.project_id]
   );
 
@@ -194,7 +196,7 @@ export default function Time() {
     }
 
     const list = Array.from(byProject.entries()).map(([project_id, entries]) => {
-      const project = projects.find((p) => p.id === project_id);
+      const project = Array.isArray(projects) ? projects.find((p) => p.id === project_id) : undefined;
       const rate = ((project?.default_rate_cents || 0) as number) / 100;
 
       // init alle fases zodat je altijd alle rijen ziet
@@ -233,7 +235,7 @@ export default function Time() {
     });
 
     // filter op showArchived toggle
-    const filtered = list.filter((s) => (showArchived ? s.isArchived : !s.isArchived));
+  const filtered = Array.isArray(list) ? list.filter((s) => (showArchived ? s.isArchived : !s.isArchived)) : [];
 
     // sort: recentst actief bovenaan
     filtered.sort((a, b) => {

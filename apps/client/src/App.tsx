@@ -33,11 +33,16 @@ function AppRoutes({ user }: { user: User }) {
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/time" element={<Time />} />
         <Route path="/budgets" element={<Budgets />} />
+        <Route path="/ideas" element={require('./pages/Ideas').default ? require('./pages/Ideas').default() : null} />
+        <Route path="/calendar" element={require('./pages/Calendar').default ? require('./pages/Calendar').default() : null} />
+        <Route path="/settings" element={require('./pages/Settings').default ? require('./pages/Settings').default() : null} />
         <Route path="/invoices" element={<Invoices />} />
         {/* RRD v6 wildcard voor eventuele subroutes onder /health */}
         <Route path="/health/*" element={<Health />} />
         <Route path="/coach" element={<Coach />} />
         <Route path="/backup" element={<Backup />} />
+        {/* Toegevoegd: route voor Projecten */}
+        <Route path="/projects" element={require('./pages/Projecten').default ? require('./pages/Projecten').default() : null} />
         <Route
           path="*"
           element={

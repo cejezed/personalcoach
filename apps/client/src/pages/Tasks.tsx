@@ -297,7 +297,7 @@ const Tasks = () => {
               className="border border-gray-300 rounded-md px-3 py-2 w-full"
             >
               <option value="">Alle projecten</option>
-              {projects.map((project: any) => (
+              {Array.isArray(projects) && projects.map((project: any) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
                 </option>
@@ -321,7 +321,7 @@ const Tasks = () => {
               <p className="text-gray-600">Maak je eerste taak aan om te beginnen</p>
             </div>
           ) : (
-            filteredTasks.map((task: Task) => (
+            Array.isArray(filteredTasks) && filteredTasks.map((task: Task) => (
               <div key={task.id} className="p-4 hover:bg-gray-50">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-3 flex-1">
@@ -473,7 +473,7 @@ const Tasks = () => {
                   className="border border-gray-300 rounded-md px-3 py-2 w-full"
                 >
                   <option value="">Geen project</option>
-                  {projects.map((project: any) => (
+                  {Array.isArray(projects) && projects.map((project: any) => (
                     <option key={project.id} value={project.id}>
                       {project.name} ({project.city})
                     </option>
@@ -572,7 +572,7 @@ const Tasks = () => {
                   className="border border-gray-300 rounded-md px-3 py-2 w-full"
                 >
                   <option value="">Geen project</option>
-                  {projects.map((project: any) => (
+                  {Array.isArray(projects) && projects.map((project: any) => (
                     <option key={project.id} value={project.id}>
                       {project.name} ({project.city})
                     </option>

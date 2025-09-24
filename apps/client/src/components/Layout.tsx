@@ -75,13 +75,14 @@ export default function Layout({ children, user }: LayoutProps) {
           { label: "Time Tracking", href: "/time" },
           { label: "Tasks", href: "/tasks" },
           { label: "Ideas", href: "/ideas" },
-          { label: "Projecten", href: "/projecten" },
+          { label: "Projecten", href: "/projects" },
+          { label: "Agenda", href: "/calendar" },
           { label: "Budgets", href: "/budgets" },
           { label: "Invoices", href: "/invoices" },
           { label: "Health", href: "/health" },
           { label: "Coach", href: "/coach" },
           { label: "Backup", href: "/backup" },
-          { label: "Instellingen", href: "/instellingen" },
+          { label: "Instellingen", href: "/settings" },
         ]}
       />
 
@@ -217,7 +218,7 @@ export default function Layout({ children, user }: LayoutProps) {
 
         {/* Page Content */}
         <main className="lg:mx-auto lg:max-w-7xl lg:px-8 pb-20 lg:pb-8">
-          <div className="px-4 py-8 sm:px-6 lg:px-0">{children}</div>
+          <div className="px-4 py-2 sm:px-6 lg:px-0">{children}</div>
         </main>
       </div>
 
