@@ -1,996 +1,702 @@
-// apps/client/src/pages/Health.tsx
-import { useState, useEffect } from "react";
-import { NavLink, Routes, Route, useLocation } from "react-router-dom";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import {
-  Plus,
-  Activity,
-  Footprints,
-  Clock,
-  Zap,
-  Star,
+import React, { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { 
+  Plus, 
+  Activity, 
+  Footprints, 
+  Clock, 
+  Zap, 
+  Star, 
+  Target,
+  TrendingUp,
+  Calendar,
+  X
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
-import type {
-  Workout,
-  InsertWorkout,
-  Steps,
-  InsertSteps,
-  EnergyCheck,
-  InsertEnergyCheck,
-} from "@/types/schema";
+import { api } from "@/lib/api";
 
-/* ----------------------------- Workouts Tab ----------------------------- */
+/* =======================
+   Types
+======================= */
+type Workout = {
+  id: string;
+  name: string;
+  description?: string | null;
+  duration_minutes?: number | null;
+  intensity: "low" | "medium" | "high";
+  logged_at: string;
+};
 
-function WorkoutsTab() {
-  const { toast } = useToast();
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [workoutFormData, setWorkoutFormData] = useState({
+type Steps = {
+  id: string;
+  step_count: number;
+  step_date: string;
+  source: string;
+};
+
+type EnergyCheck = {
+  id: string;
+  energy_level: number;
+  mood?: string | null;
+  notes?: string | null;
+  logged_at: string;
+};
+
+/* =======================
+   Helpers
+======================= */
+const todayYMD = () => new Date().toISOString().split("T")[0];
+
+const formatDate = (dateString: string | Date | null) => {
+  if (!dateString) return "N/A";
+  const date = typeof dateString === "string" ? new Date(dateString) : dateString;
+  return date.toLocaleDateString("nl-NL", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const formatDateShort = (dateString: string | Date | null) => {
+  if (!dateString) return "N/A";
+  const date = typeof dateString === "string" ? new Date(dateString) : dateString;
+  return date.toLocaleDateString("nl-NL", {
+    month: "short",
+    day: "numeric",
+  });
+};
+
+const getIntensityColor = (intensity: string) => {
+  switch (intensity) {
+    case "high": return "text-red-500 bg-red-50";
+    case "medium": return "text-orange-500 bg-orange-50";
+    case "low": return "text-green-500 bg-green-50";
+    default: return "text-gray-500 bg-gray-50";
+  }
+};
+
+const getEnergyText = (level: number) => {
+  switch (level) {
+    case 1: return { text: "Zeer Laag", color: "text-red-600" };
+    case 2: return { text: "Laag", color: "text-orange-500" };
+    case 3: return { text: "Gemiddeld", color: "text-yellow-500" };
+    case 4: return { text: "Hoog", color: "text-green-500" };
+    case 5: return { text: "Zeer Hoog", color: "text-green-600" };
+    default: return { text: "Onbekend", color: "text-gray-500" };
+  }
+};
+
+const renderStars = (level: number, interactive: boolean = false, onClick?: (rating: number) => void) => {
+  return Array.from({ length: 5 }, (_, i) => (
+    <Star
+      key={i}
+      className={`h-4 w-4 ${interactive ? 'cursor-pointer' : ''} transition-colors ${
+        i < level
+          ? "fill-yellow-400 text-yellow-400"
+          : "text-gray-300 hover:text-yellow-400"
+      }`}
+      onClick={() => interactive && onClick && onClick(i + 1)}
+    />
+  ));
+};
+
+/* =======================
+   Component
+======================= */
+export default function Health() {
+  const queryClient = useQueryClient();
+  const today = todayYMD();
+
+  /* ---- Modal States ---- */
+  const [showWorkoutModal, setShowWorkoutModal] = useState(false);
+  const [showStepsModal, setShowStepsModal] = useState(false);
+  const [showEnergyModal, setShowEnergyModal] = useState(false);
+
+  /* ---- Form States ---- */
+  const [workoutForm, setWorkoutForm] = useState({
     name: "",
     description: "",
     duration_minutes: "",
     intensity: "medium" as "low" | "medium" | "high",
   });
 
-  // Fetch workouts
-  const { data: workouts = [] } = useQuery<Workout[]>({
-    queryKey: ["/api/workouts"],
-  });
-
-  // Create workout mutation
-  const createWorkoutMutation = useMutation({
-    mutationFn: async (data: InsertWorkout) => {
-      const response = await apiRequest("POST", "/api/workouts", data);
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Workout Created",
-        description: "Your workout has been logged successfully.",
-      });
-      setIsCreateDialogOpen(false);
-      setWorkoutFormData({
-        name: "",
-        description: "",
-        duration_minutes: "",
-        intensity: "medium",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/workouts"] });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to create workout. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleCreateWorkout = () => {
-    const data: InsertWorkout = {
-      name: workoutFormData.name,
-      description: workoutFormData.description || null,
-      duration_minutes: workoutFormData.duration_minutes
-        ? parseInt(workoutFormData.duration_minutes)
-        : null,
-      intensity: workoutFormData.intensity,
-      logged_at: new Date().toISOString(),
-    };
-    createWorkoutMutation.mutate(data);
-  };
-
-  const formatDate = (dateString: string | Date | null) => {
-    if (!dateString) return "N/A";
-    const date =
-      typeof dateString === "string" ? new Date(dateString) : dateString;
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const getIntensityColor = (intensity: string) => {
-    switch (intensity) {
-      case "high":
-        return "text-red-500";
-      case "medium":
-        return "text-orange-500";
-      case "low":
-        return "text-green-500";
-      default:
-        return "text-gray-500";
-    }
-  };
-
-  // Get today's workouts (using stable YYYY-MM-DD format)
-  const todayYMD = new Date().toISOString().split("T")[0];
-  const todaysWorkouts = workouts.filter((workout) => {
-    if (!workout.logged_at) return false;
-    const workoutDateYMD = new Date(workout.logged_at)
-      .toISOString()
-      .split("T")[0];
-    return workoutDateYMD === todayYMD;
-  });
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium text-foreground">Workout Tracking</h2>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-create-workout">
-              <Plus className="h-4 w-4 mr-2" />
-              Log Workout
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Log New Workout</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="workout-name">Workout Name</Label>
-                <Input
-                  id="workout-name"
-                  placeholder="e.g. Morning Run, Push-ups..."
-                  value={workoutFormData.name}
-                  onChange={(e) =>
-                    setWorkoutFormData((prev) => ({
-                      ...prev,
-                      name: e.target.value,
-                    }))
-                  }
-                  data-testid="input-workout-name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="workout-description">Description (Optional)</Label>
-                <Input
-                  id="workout-description"
-                  placeholder="Add workout details..."
-                  value={workoutFormData.description}
-                  onChange={(e) =>
-                    setWorkoutFormData((prev) => ({
-                      ...prev,
-                      description: e.target.value,
-                    }))
-                  }
-                  data-testid="input-workout-description"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="workout-duration">Duration (minutes)</Label>
-                <Input
-                  id="workout-duration"
-                  type="number"
-                  min="1"
-                  placeholder="30"
-                  value={workoutFormData.duration_minutes}
-                  onChange={(e) =>
-                    setWorkoutFormData((prev) => ({
-                      ...prev,
-                      duration_minutes: e.target.value,
-                    }))
-                  }
-                  data-testid="input-workout-duration"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="workout-intensity">Intensity</Label>
-                <select
-                  id="workout-intensity"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  value={workoutFormData.intensity}
-                  onChange={(e) =>
-                    setWorkoutFormData((prev) => ({
-                      ...prev,
-                      intensity: e.target.value as "low" | "medium" | "high",
-                    }))
-                  }
-                  data-testid="select-workout-intensity"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsCreateDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreateWorkout}
-                  disabled={
-                    !workoutFormData.name.trim() ||
-                    createWorkoutMutation.isPending
-                  }
-                  data-testid="button-save-workout"
-                >
-                  {createWorkoutMutation.isPending ? "Logging..." : "Log Workout"}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h3 className="text-md font-medium text-foreground mb-4">
-          Today's Workouts
-        </h3>
-        {todaysWorkouts.length === 0 ? (
-          <div className="text-center py-8">
-            <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground mb-4">
-              No workouts logged for today
-            </p>
-            <Button
-              onClick={() => setIsCreateDialogOpen(true)}
-              variant="outline"
-              data-testid="button-log-first-workout"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Log Your First Workout
-            </Button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {todaysWorkouts.map((workout) => (
-              <div
-                key={workout.id}
-                className="p-4 border border-border rounded-lg"
-                data-testid={`card-workout-${workout.id}`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h4
-                      className="font-medium text-foreground mb-2"
-                      data-testid={`text-workout-name-${workout.id}`}
-                    >
-                      {workout.name}
-                    </h4>
-                    <div className="space-y-1">
-                      {workout.duration_minutes && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          <span data-testid={`text-workout-duration-${workout.id}`}>
-                            {workout.duration_minutes} minutes
-                          </span>
-                        </div>
-                      )}
-                      {workout.intensity && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Zap className="h-3 w-3" />
-                          <span
-                            className={`capitalize ${getIntensityColor(workout.intensity)}`}
-                            data-testid={`text-workout-intensity-${workout.id}`}
-                          >
-                            {workout.intensity} intensity
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    {workout.description && (
-                      <p
-                        className="text-sm text-muted-foreground mt-2"
-                        data-testid={`text-workout-description-${workout.id}`}
-                      >
-                        {workout.description}
-                      </p>
-                    )}
-                    <p
-                      className="text-xs text-muted-foreground mt-2"
-                      data-testid={`text-workout-time-${workout.id}`}
-                    >
-                      {formatDate(workout.logged_at)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h3 className="text-md font-medium text-foreground mb-4">
-          Recent Workouts
-        </h3>
-        {workouts.length === 0 ? (
-          <div className="text-center py-8">
-            <Activity className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-muted-foreground">No workouts logged yet</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {workouts
-              .sort((a, b) => {
-                const aTime = a.logged_at
-                  ? new Date(a.logged_at).getTime()
-                  : 0;
-                const bTime = b.logged_at
-                  ? new Date(b.logged_at).getTime()
-                  : 0;
-                return bTime - aTime;
-              })
-              .slice(0, 10)
-              .map((workout) => (
-                <div
-                  key={workout.id}
-                  className="flex items-center justify-between p-3 border border-border rounded-lg"
-                  data-testid={`row-workout-${workout.id}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Activity className="h-4 w-4 text-primary" />
-                    <div>
-                      <h4
-                        className="font-medium text-foreground text-sm"
-                        data-testid={`text-workout-list-name-${workout.id}`}
-                      >
-                        {workout.name}
-                      </h4>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <span data-testid={`text-workout-list-time-${workout.id}`}>
-                          {formatDate(workout.logged_at)}
-                        </span>
-                        {workout.duration_minutes && (
-                          <span>{workout.duration_minutes}min</span>
-                        )}
-                        {workout.intensity && (
-                          <span
-                            className={`capitalize ${getIntensityColor(workout.intensity)}`}
-                          >
-                            {workout.intensity}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------- Steps Tab ------------------------------ */
-
-function StepsTab() {
-  const { toast } = useToast();
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [stepFormData, setStepFormData] = useState({
+  const [stepsForm, setStepsForm] = useState({
     step_count: "",
-    step_date: new Date().toISOString().split("T")[0],
+    step_date: today,
     source: "manual",
   });
 
-  // Create/update steps mutation
-  const createStepsMutation = useMutation({
-    mutationFn: async (data: InsertSteps) => {
-      const response = await apiRequest("POST", "/api/steps", data);
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Steps Logged",
-        description: "Your step count has been saved successfully.",
-      });
-      setIsCreateDialogOpen(false);
-      setStepFormData({
-        step_count: "",
-        step_date: new Date().toISOString().split("T")[0],
-        source: "manual",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/steps"] });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to log steps. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleCreateSteps = () => {
-    const data: InsertSteps = {
-      step_count: parseInt(stepFormData.step_count),
-      step_date: stepFormData.step_date,
-      source: stepFormData.source,
-    };
-    createStepsMutation.mutate(data);
-  };
-
-  // Get today's steps (consistent YYYY-MM-DD format)
-  const todayYMD = new Date().toISOString().split("T")[0];
-  const { data: todaysSteps } = useQuery<Steps | null>({
-    queryKey: ["/api/steps", todayYMD],
-  });
-
-  const formatDate = (dateString: string | Date | null) => {
-    if (!dateString) return "N/A";
-    const date =
-      typeof dateString === "string" ? new Date(dateString) : dateString;
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium text-foreground">Steps Tracking</h2>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-log-steps">
-              <Plus className="h-4 w-4 mr-2" />
-              Log Steps
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Log Step Count</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="step-count">Step Count</Label>
-                <Input
-                  id="step-count"
-                  type="number"
-                  min="0"
-                  placeholder="10000"
-                  value={stepFormData.step_count}
-                  onChange={(e) =>
-                    setStepFormData((prev) => ({
-                      ...prev,
-                      step_count: e.target.value,
-                    }))
-                  }
-                  data-testid="input-step-count"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="step-date">Date</Label>
-                <Input
-                  id="step-date"
-                  type="date"
-                  value={stepFormData.step_date}
-                  onChange={(e) =>
-                    setStepFormData((prev) => ({
-                      ...prev,
-                      step_date: e.target.value,
-                    }))
-                  }
-                  data-testid="input-step-date"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="step-source">Source</Label>
-                <select
-                  id="step-source"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  value={stepFormData.source}
-                  onChange={(e) =>
-                    setStepFormData((prev) => ({
-                      ...prev,
-                      source: e.target.value,
-                    }))
-                  }
-                  data-testid="select-step-source"
-                >
-                  <option value="manual">Manual Entry</option>
-                  <option value="fitness_tracker">Fitness Tracker</option>
-                  <option value="smartphone">Smartphone</option>
-                  <option value="smartwatch">Smartwatch</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsCreateDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreateSteps}
-                  disabled={
-                    !stepFormData.step_count.trim() ||
-                    createStepsMutation.isPending
-                  }
-                  data-testid="button-save-steps"
-                >
-                  {createStepsMutation.isPending ? "Logging..." : "Log Steps"}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h3 className="text-md font-medium text-foreground mb-4">Today's Steps</h3>
-        <div className="text-center py-6">
-          <Footprints className="h-16 w-16 text-primary mx-auto mb-4" />
-          <div
-            className="text-3xl font-bold text-foreground mb-2"
-            data-testid="text-steps-today-count"
-          >
-            {todaysSteps?.step_count?.toLocaleString() || "0"}
-          </div>
-        </div>
-        <p className="text-muted-foreground text-center" data-testid="text-steps-today-date">
-          Steps for {formatDate(todayYMD)}
-        </p>
-        {todaysSteps?.source && (
-          <p className="text-xs text-muted-foreground mt-2 text-center capitalize">
-            Source: {todaysSteps.source.replace("_", " ")}
-          </p>
-        )}
-      </div>
-
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h3 className="text-md font-medium text-foreground mb-4">Step Goals</h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              Daily Goal (10,000 steps)
-            </span>
-            <span className="text-sm font-medium">
-              {todaysSteps ? Math.round((todaysSteps.step_count / 10000) * 100) : 0}%
-            </span>
-          </div>
-          <div className="w-full bg-secondary rounded-full h-2">
-            <div
-              className="bg-primary h-2 rounded-full transition-all duration-300"
-              style={{
-                width: `${Math.min(
-                  todaysSteps ? (todaysSteps.step_count / 10000) * 100 : 0,
-                  100
-                )}%`,
-              }}
-              data-testid="progress-daily-steps"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------- Energy Tab ----------------------------- */
-
-function EnergyTab() {
-  const { toast } = useToast();
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [energyFormData, setEnergyFormData] = useState({
+  const [energyForm, setEnergyForm] = useState({
     energy_level: 3,
     mood: "",
     notes: "",
   });
 
-  // Fetch recent energy checks
+  /* ---- Data Queries ---- */
+  const { data: workouts = [] } = useQuery<Workout[]>({
+    queryKey: ["workouts"],
+    queryFn: () => api<Workout[]>("/api/workouts"),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: todaysSteps } = useQuery<Steps | null>({
+    queryKey: ["steps", today],
+    queryFn: () => api<Steps | null>(`/api/steps/${today}`),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data: energyChecks = [] } = useQuery<EnergyCheck[]>({
-    queryKey: ["/api/energy-checks"],
+    queryKey: ["energy-checks"],
+    queryFn: () => api<EnergyCheck[]>("/api/energy-checks"),
+    staleTime: 5 * 60 * 1000,
   });
 
-  // Today's energy check (date-specific like steps)
-  const todayEnergyYMD = new Date().toISOString().split("T")[0];
-  const { data: todaysEnergyCheck } = useQuery<EnergyCheck | null>({
-    queryKey: ["/api/energy-checks", todayEnergyYMD],
-  });
-
-  // Create energy check mutation with optimistic updates
-  const createEnergyMutation = useMutation({
-    mutationFn: async (data: InsertEnergyCheck) => {
-      const response = await apiRequest("POST", "/api/energy-checks", data);
-      return response.json();
-    },
-    onMutate: async (newEnergyCheck) => {
-      await queryClient.cancelQueries({ queryKey: ["/api/energy-checks"] });
-      await queryClient.cancelQueries({
-        queryKey: ["/api/energy-checks", todayEnergyYMD],
-      });
-
-      const previousEnergyChecks = queryClient.getQueryData([
-        "/api/energy-checks",
-      ]);
-      const previousTodaysCheck = queryClient.getQueryData([
-        "/api/energy-checks",
-        todayEnergyYMD,
-      ]);
-
-      const optimisticCheck: EnergyCheck = {
-        id: `temp-${Date.now()}`,
-        user_id: "mock-user-id",
-        energy_level: newEnergyCheck.energy_level,
-        mood: newEnergyCheck.mood || null,
-        notes: newEnergyCheck.notes || null,
-        logged_at: new Date(),
-        created_at: new Date(),
-      };
-
-      queryClient.setQueryData(
-        ["/api/energy-checks"],
-        (old: EnergyCheck[] | undefined) => {
-          return old ? [optimisticCheck, ...old] : [optimisticCheck];
-        }
-      );
-
-      queryClient.setQueryData(
-        ["/api/energy-checks", todayEnergyYMD],
-        optimisticCheck
-      );
-
-      return { previousEnergyChecks, previousTodaysCheck };
-    },
-    onError: (_err, _newEnergyCheck, context) => {
-      if (context?.previousEnergyChecks) {
-        queryClient.setQueryData(
-          ["/api/energy-checks"],
-          context.previousEnergyChecks
-        );
-      }
-      if (context?.previousTodaysCheck !== undefined) {
-        queryClient.setQueryData(
-          ["/api/energy-checks", todayEnergyYMD],
-          context.previousTodaysCheck
-        );
-      }
-      toast({
-        title: "Error",
-        description: "Failed to log energy level. Please try again.",
-        variant: "destructive",
-      });
-    },
+  /* ---- Mutations ---- */
+  const addWorkoutMutation = useMutation({
+    mutationFn: (data: any) => api("/api/workouts", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => {
-      toast({
-        title: "Energy Level Logged",
-        description: "Your energy check has been saved successfully.",
-      });
-      setIsCreateDialogOpen(false);
-      setEnergyFormData({ energy_level: 3, mood: "", notes: "" });
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/energy-checks"] });
+      queryClient.invalidateQueries({ queryKey: ["workouts"] });
+      setWorkoutForm({ name: "", description: "", duration_minutes: "", intensity: "medium" });
+      setShowWorkoutModal(false);
     },
   });
 
-  const handleCreateEnergy = () => {
-    const data: InsertEnergyCheck = {
-      energy_level: energyFormData.energy_level,
-      mood: energyFormData.mood || null,
-      notes: energyFormData.notes || null,
-      logged_at: new Date().toISOString(),
-    };
-    createEnergyMutation.mutate(data);
-  };
+  const addStepsMutation = useMutation({
+    mutationFn: (data: any) => api("/api/steps", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["steps", today] });
+      setStepsForm({ step_count: "", step_date: today, source: "manual" });
+      setShowStepsModal(false);
+    },
+  });
 
-  const formatDate = (dateString: string | Date | null) => {
-    if (!dateString) return "N/A";
-    const date =
-      typeof dateString === "string" ? new Date(dateString) : dateString;
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+  const addEnergyMutation = useMutation({
+    mutationFn: (data: any) => api("/api/energy-checks", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["energy-checks"] });
+      setEnergyForm({ energy_level: 3, mood: "", notes: "" });
+      setShowEnergyModal(false);
+    },
+  });
+
+  /* ---- Handle Submissions ---- */
+  const handleWorkoutSubmit = () => {
+    if (!workoutForm.name.trim()) return;
+    addWorkoutMutation.mutate({
+      name: workoutForm.name,
+      description: workoutForm.description || null,
+      duration_minutes: workoutForm.duration_minutes ? parseInt(workoutForm.duration_minutes) : null,
+      intensity: workoutForm.intensity,
+      logged_at: new Date().toISOString(),
     });
   };
 
-  const renderStars = (
-    level: number,
-    interactive: boolean = false,
-    onClick?: (rating: number) => void
-  ) => {
-    return Array.from({ length: 5 }, (_, i) => (
-      <Star
-        key={i}
-        className={`h-5 w-5 cursor-pointer transition-colors ${
-          i < level
-            ? "fill-yellow-400 text-yellow-400"
-            : "text-gray-300 hover:text-yellow-400"
-        }`}
-        onClick={() => interactive && onClick && onClick(i + 1)}
-        data-testid={`star-${i + 1}`}
-      />
-    ));
+  const handleStepsSubmit = () => {
+    if (!stepsForm.step_count) return;
+    addStepsMutation.mutate({
+      step_count: parseInt(stepsForm.step_count),
+      step_date: stepsForm.step_date,
+      source: stepsForm.source,
+    });
   };
 
-  const getEnergyText = (level: number) => {
-    switch (level) {
-      case 1:
-        return { text: "Very Low", color: "text-red-600" };
-      case 2:
-        return { text: "Low", color: "text-orange-500" };
-      case 3:
-        return { text: "Moderate", color: "text-yellow-500" };
-      case 4:
-        return { text: "High", color: "text-green-500" };
-      case 5:
-        return { text: "Very High", color: "text-green-600" };
-      default:
-        return { text: "Unknown", color: "text-gray-500" };
-    }
+  const handleEnergySubmit = () => {
+    addEnergyMutation.mutate({
+      energy_level: energyForm.energy_level,
+      mood: energyForm.mood || null,
+      notes: energyForm.notes || null,
+      logged_at: new Date().toISOString(),
+    });
   };
 
-  const latestEnergyToday = todaysEnergyCheck;
+  /* ---- Derived Data ---- */
+  const todaysWorkouts = workouts.filter(w => {
+    if (!w.logged_at) return false;
+    return new Date(w.logged_at).toISOString().split("T")[0] === today;
+  });
+
+  const latestEnergyCheck = energyChecks
+    .sort((a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime())[0];
+
+  const weeklyStats = {
+    totalWorkouts: workouts.filter(w => {
+      const workoutDate = new Date(w.logged_at);
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      return workoutDate >= weekAgo;
+    }).length,
+    totalMinutes: workouts
+      .filter(w => {
+        const workoutDate = new Date(w.logged_at);
+        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        return workoutDate >= weekAgo;
+      })
+      .reduce((sum, w) => sum + (w.duration_minutes || 0), 0),
+  };
+
+  const stepGoalProgress = todaysSteps ? Math.min((todaysSteps.step_count / 10000) * 100, 100) : 0;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium text-foreground">Energy Tracking</h2>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-log-energy">
-              <Plus className="h-4 w-4 mr-2" />
-              Log Energy Level
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Log Energy Level</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Energy Level (1-5)</Label>
-                <div className="flex items-center gap-1">
-                  {renderStars(energyFormData.energy_level, true, (level) =>
-                    setEnergyFormData((prev) => ({ ...prev, energy_level: level }))
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {getEnergyText(energyFormData.energy_level).text}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="energy-mood">Mood (Optional)</Label>
-                <Input
-                  id="energy-mood"
-                  placeholder="e.g. Happy, Tired, Motivated..."
-                  value={energyFormData.mood}
-                  onChange={(e) =>
-                    setEnergyFormData((prev) => ({
-                      ...prev,
-                      mood: e.target.value,
-                    }))
-                  }
-                  data-testid="input-energy-mood"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="energy-notes">Notes (Optional)</Label>
-                <Input
-                  id="energy-notes"
-                  placeholder="Any additional notes..."
-                  value={energyFormData.notes}
-                  onChange={(e) =>
-                    setEnergyFormData((prev) => ({
-                      ...prev,
-                      notes: e.target.value,
-                    }))
-                  }
-                  data-testid="input-energy-notes"
-                />
-              </div>
-              <div className="flex justify-end gap-3">
-                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreateEnergy}
-                  disabled={createEnergyMutation.isPending}
-                  data-testid="button-save-energy"
-                >
-                  {createEnergyMutation.isPending ? "Logging..." : "Log Energy"}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <div>
+          <h1 className="text-3xl font-bold">Health Tracking</h1>
+          <p className="text-gray-600 mt-1">Overzicht van je dagelijkse gezondheidsmetrics</p>
+        </div>
       </div>
 
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h3 className="text-md font-medium text-foreground mb-4">
-          Current Energy Level
-        </h3>
-        <div className="text-center py-6">
-          <Zap className="h-16 w-16 text-primary mx-auto mb-4" />
-          <div className="space-y-3">
-            <div className="flex justify-center" data-testid="energy-level-display">
-              {renderStars(latestEnergyToday?.energy_level || 0)}
-            </div>
+      {/* Quick Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-lg shadow-sm border p-4">
+          <div className="flex items-center justify-between">
             <div>
-              <div
-                className={`text-xl font-bold ${
-                  getEnergyText(latestEnergyToday?.energy_level || 0).color
-                }`}
-              >
-                {getEnergyText(latestEnergyToday?.energy_level || 0).text}
+              <p className="text-sm font-medium text-gray-600">Vandaag</p>
+              <p className="text-2xl font-bold text-blue-600">{todaysWorkouts.length}</p>
+              <p className="text-xs text-gray-500">workouts</p>
+            </div>
+            <Activity className="w-8 h-8 text-blue-500" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Stappen</p>
+              <p className="text-2xl font-bold text-green-600">
+                {todaysSteps?.step_count?.toLocaleString() || "0"}
+              </p>
+              <p className="text-xs text-gray-500">van 10.000</p>
+            </div>
+            <Footprints className="w-8 h-8 text-green-500" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Energie</p>
+              <div className="flex items-center gap-1">
+                {renderStars(latestEnergyCheck?.energy_level || 0)}
               </div>
-              <p className="text-muted-foreground text-sm mt-1">
-                {latestEnergyToday
-                  ? `Last updated: ${formatDate(latestEnergyToday.logged_at)}`
-                  : "No energy data for today"}
+              <p className={`text-xs ${getEnergyText(latestEnergyCheck?.energy_level || 0).color}`}>
+                {getEnergyText(latestEnergyCheck?.energy_level || 0).text}
               </p>
             </div>
-            {latestEnergyToday?.mood && (
-              <p className="text-sm text-muted-foreground">
-                Mood: <span className="font-medium">{latestEnergyToday.mood}</span>
+            <Zap className="w-8 h-8 text-yellow-500" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Deze week</p>
+              <p className="text-2xl font-bold text-purple-600">{weeklyStats.totalWorkouts}</p>
+              <p className="text-xs text-gray-500">{weeklyStats.totalMinutes} min</p>
+            </div>
+            <TrendingUp className="w-8 h-8 text-purple-500" />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Workouts Section */}
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Workouts</h3>
+            <button
+              onClick={() => setShowWorkoutModal(true)}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Workout
+            </button>
+          </div>
+
+          {todaysWorkouts.length === 0 ? (
+            <div className="text-center py-6">
+              <Activity className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600 mb-3">Geen workouts vandaag</p>
+              <button
+                onClick={() => setShowWorkoutModal(true)}
+                className="text-blue-600 hover:text-blue-800 text-sm"
+              >
+                Log je eerste workout
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {todaysWorkouts.map(workout => (
+                <div key={workout.id} className="border rounded-lg p-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h4 className="font-medium">{workout.name}</h4>
+                      <div className="flex items-center gap-3 text-sm text-gray-600 mt-1">
+                        {workout.duration_minutes && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {workout.duration_minutes} min
+                          </span>
+                        )}
+                        <span className={`px-2 py-1 rounded-full text-xs ${getIntensityColor(workout.intensity)}`}>
+                          {workout.intensity}
+                        </span>
+                      </div>
+                      {workout.description && (
+                        <p className="text-sm text-gray-600 mt-1">{workout.description}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Recent workouts preview */}
+          {workouts.length > todaysWorkouts.length && (
+            <div className="mt-4 pt-4 border-t">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Recent</h4>
+              <div className="space-y-2">
+                {workouts
+                  .filter(w => new Date(w.logged_at).toISOString().split("T")[0] !== today)
+                  .sort((a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime())
+                  .slice(0, 3)
+                  .map(workout => (
+                    <div key={workout.id} className="flex items-center justify-between text-sm">
+                      <span className="font-medium">{workout.name}</span>
+                      <span className="text-gray-500">{formatDateShort(workout.logged_at)}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Steps Section */}
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Stappen</h3>
+            <button
+              onClick={() => setShowStepsModal(true)}
+              className="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Stappen
+            </button>
+          </div>
+
+          <div className="text-center py-4">
+            <div className="text-3xl font-bold text-green-600 mb-2">
+              {todaysSteps?.step_count?.toLocaleString() || "0"}
+            </div>
+            <p className="text-gray-600 mb-4">stappen vandaag</p>
+
+            {/* Progress bar */}
+            <div className="mb-4">
+              <div className="flex justify-between text-sm text-gray-600 mb-2">
+                <span>Dagelijks doel</span>
+                <span>{Math.round(stepGoalProgress)}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-3">
+                <div
+                  className="bg-green-500 h-3 rounded-full transition-all duration-300"
+                  style={{ width: `${stepGoalProgress}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>0</span>
+                <span>10.000</span>
+              </div>
+            </div>
+
+            {todaysSteps && (
+              <p className="text-xs text-gray-500">
+                Bron: {todaysSteps.source.replace("_", " ")}
               </p>
             )}
           </div>
         </div>
       </div>
 
-      <div className="bg-card rounded-lg border border-border p-6">
-        <h3 className="text-md font-medium text-foreground mb-4">
-          Recent Energy Checks
-        </h3>
-        {energyChecks.length === 0 ? (
-          <div className="text-center py-8">
-            <Zap className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-muted-foreground">No energy checks logged yet</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {energyChecks
-              .sort((a, b) => {
-                const aTime = a.logged_at ? new Date(a.logged_at).getTime() : 0;
-                const bTime = b.logged_at ? new Date(b.logged_at).getTime() : 0;
-                return bTime - aTime;
-              })
-              .slice(0, 10)
-              .map((check) => (
-                <div
-                  key={check.id}
-                  className="flex items-center justify-between p-3 border border-border rounded-lg"
-                  data-testid={`row-energy-${check.id}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1">
-                      {renderStars(check.energy_level)}
-                    </div>
-                    <div>
-                      <div
-                        className={`font-medium text-sm ${getEnergyText(check.energy_level).color}`}
-                      >
-                        {getEnergyText(check.energy_level).text}
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <span>{formatDate(check.logged_at)}</span>
-                        {check.mood && <span>Mood: {check.mood}</span>}
-                      </div>
-                      {check.notes && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {check.notes}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+      {/* Energy Section */}
+      <div className="bg-white rounded-lg shadow-sm border p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Energie Level</h3>
+          <button
+            onClick={() => setShowEnergyModal(true)}
+            className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Energie
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Current energy */}
+          <div className="text-center">
+            <h4 className="font-medium text-gray-700 mb-3">Huidige Level</h4>
+            {latestEnergyCheck ? (
+              <div>
+                <div className="flex justify-center mb-2">
+                  {renderStars(latestEnergyCheck.energy_level)}
                 </div>
-              ))}
+                <div className={`text-xl font-bold ${getEnergyText(latestEnergyCheck.energy_level).color}`}>
+                  {getEnergyText(latestEnergyCheck.energy_level).text}
+                </div>
+                {latestEnergyCheck.mood && (
+                  <p className="text-sm text-gray-600 mt-1">
+                    Mood: {latestEnergyCheck.mood}
+                  </p>
+                )}
+                <p className="text-xs text-gray-500 mt-2">
+                  {formatDate(latestEnergyCheck.logged_at)}
+                </p>
+              </div>
+            ) : (
+              <div>
+                <Zap className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-600">Nog geen energie data</p>
+              </div>
+            )}
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
-/* --------------------------------- Page -------------------------------- */
-
-export default function Health() {
-  const location = useLocation();
-  const pathname = typeof location === "string" ? location : location.pathname; // compat safeguard
-  const currentTab =
-    pathname.endsWith("/steps")
-      ? "steps"
-      : pathname.endsWith("/energy")
-      ? "energy"
-      : "workouts";
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Health Tracking</h1>
-        <p className="text-muted-foreground mt-2">
-          Monitor your workouts, steps, and wellness metrics
-        </p>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="border-b border-border">
-        <nav className="flex space-x-8">
-          <NavLink
-            to=""
-            end
-            className={({ isActive }) =>
-              `py-2 px-1 border-b-2 font-medium text-sm ${
-                isActive || currentTab === "workouts"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-              }`
-            }
-            data-testid="tab-workouts"
-          >
-            <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              Workouts
+          {/* Recent energy checks */}
+          <div>
+            <h4 className="font-medium text-gray-700 mb-3">Recente Checks</h4>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {energyChecks
+                .sort((a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime())
+                .slice(0, 5)
+                .map(check => (
+                  <div key={check.id} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="flex">
+                        {renderStars(check.energy_level)}
+                      </div>
+                      <span className={getEnergyText(check.energy_level).color}>
+                        {getEnergyText(check.energy_level).text}
+                      </span>
+                    </div>
+                    <span className="text-gray-500">{formatDateShort(check.logged_at)}</span>
+                  </div>
+                ))}
             </div>
-          </NavLink>
-
-          <NavLink
-            to="steps"
-            className={({ isActive }) =>
-              `py-2 px-1 border-b-2 font-medium text-sm ${
-                isActive || currentTab === "steps"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-              }`
-            }
-            data-testid="tab-steps"
-          >
-            <div className="flex items-center gap-2">
-              <Footprints className="h-4 w-4" />
-              Steps
-            </div>
-          </NavLink>
-
-          <NavLink
-            to="energy"
-            className={({ isActive }) =>
-              `py-2 px-1 border-b-2 font-medium text-sm ${
-                isActive || currentTab === "energy"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-              }`
-            }
-            data-testid="tab-energy"
-          >
-            <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4" />
-              Energy
-            </div>
-          </NavLink>
-        </nav>
+          </div>
+        </div>
       </div>
 
-      {/* Tab Content: nested routes onder /health/* */}
-      <Routes>
-        <Route path="steps" element={<StepsTab />} />
-        <Route path="energy" element={<EnergyTab />} />
-        <Route index element={<WorkoutsTab />} />
-      </Routes>
+      {/* Workout Modal */}
+      {showWorkoutModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Workout Toevoegen</h3>
+              <button onClick={() => setShowWorkoutModal(false)}>
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Workout Naam</label>
+                <input
+                  type="text"
+                  placeholder="bijv. Hardlopen, Push-ups..."
+                  value={workoutForm.name}
+                  onChange={(e) => setWorkoutForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full border border-gray-300 rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Beschrijving (optioneel)</label>
+                <input
+                  type="text"
+                  placeholder="Workout details..."
+                  value={workoutForm.description}
+                  onChange={(e) => setWorkoutForm(f => ({ ...f, description: e.target.value }))}
+                  className="w-full border border-gray-300 rounded px-3 py-2"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Duur (min)</label>
+                  <input
+                    type="number"
+                    placeholder="30"
+                    value={workoutForm.duration_minutes}
+                    onChange={(e) => setWorkoutForm(f => ({ ...f, duration_minutes: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Intensiteit</label>
+                  <select
+                    value={workoutForm.intensity}
+                    onChange={(e) => setWorkoutForm(f => ({ ...f, intensity: e.target.value as any }))}
+                    className="w-full border border-gray-300 rounded px-3 py-2"
+                  >
+                    <option value="low">Laag</option>
+                    <option value="medium">Gemiddeld</option>
+                    <option value="high">Hoog</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => setShowWorkoutModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Annuleren
+              </button>
+              <button
+                onClick={handleWorkoutSubmit}
+                disabled={!workoutForm.name.trim() || addWorkoutMutation.isPending}
+                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300"
+              >
+                {addWorkoutMutation.isPending ? "Opslaan..." : "Opslaan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Steps Modal */}
+      {showStepsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Stappen Toevoegen</h3>
+              <button onClick={() => setShowStepsModal(false)}>
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Aantal Stappen</label>
+                <input
+                  type="number"
+                  placeholder="10000"
+                  value={stepsForm.step_count}
+                  onChange={(e) => setStepsForm(f => ({ ...f, step_count: e.target.value }))}
+                  className="w-full border border-gray-300 rounded px-3 py-2"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Datum</label>
+                  <input
+                    type="date"
+                    value={stepsForm.step_date}
+                    onChange={(e) => setStepsForm(f => ({ ...f, step_date: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Bron</label>
+                  <select
+                    value={stepsForm.source}
+                    onChange={(e) => setStepsForm(f => ({ ...f, source: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-2"
+                  >
+                    <option value="manual">Handmatig</option>
+                    <option value="fitness_tracker">Fitness Tracker</option>
+                    <option value="smartphone">Smartphone</option>
+                    <option value="smartwatch">Smartwatch</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => setShowStepsModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Annuleren
+              </button>
+              <button
+                onClick={handleStepsSubmit}
+                disabled={!stepsForm.step_count || addStepsMutation.isPending}
+                className="flex-1 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300"
+              >
+                {addStepsMutation.isPending ? "Opslaan..." : "Opslaan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Energy Modal */}
+      {showEnergyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Energie Level Toevoegen</h3>
+              <button onClick={() => setShowEnergyModal(false)}>
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Energie Level (1-5)</label>
+                <div className="flex justify-center gap-1 mb-2">
+                  {renderStars(energyForm.energy_level, true, (level) =>
+                    setEnergyForm(f => ({ ...f, energy_level: level }))
+                  )}
+                </div>
+                <p className="text-center text-sm text-gray-600">
+                  {getEnergyText(energyForm.energy_level).text}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Mood (optioneel)</label>
+                <input
+                  type="text"
+                  placeholder="bijv. Blij, Moe, Gemotiveerd..."
+                  value={energyForm.mood}
+                  onChange={(e) => setEnergyForm(f => ({ ...f, mood: e.target.value }))}
+                  className="w-full border border-gray-300 rounded px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Notities (optioneel)</label>
+                <input
+                  type="text"
+                  placeholder="Aanvullende notities..."
+                  value={energyForm.notes}
+                  onChange={(e) => setEnergyForm(f => ({ ...f, notes: e.target.value }))}
+                  className="w-full border border-gray-300 rounded px-3 py-2"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => setShowEnergyModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Annuleren
+              </button>
+              <button
+                onClick={handleEnergySubmit}
+                disabled={addEnergyMutation.isPending}
+                className="flex-1 px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:bg-gray-300"
+              >
+                {addEnergyMutation.isPending ? "Opslaan..." : "Opslaan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

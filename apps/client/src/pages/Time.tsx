@@ -1,7 +1,8 @@
 import React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Download } from "lucide-react";
+import { Plus, Download, X } from "lucide-react";
 import { api } from "@/lib/api";
+import ExcelImportTool from "@/components/ExcelImportTool";
 
 /* =======================
    Types
@@ -115,6 +116,7 @@ export default function Time() {
   const [view, setView] = React.useState<"entries" | "summary">("entries");
   const [filterProject, setFilterProject] = React.useState<string>("");
   const [filterPeriod, setFilterPeriod] = React.useState<"all" | "week" | "month">("all");
+  const [showProjectForm, setShowProjectForm] = React.useState(false);
 
   const [form, setForm] = React.useState<{
     project_id: string;
@@ -128,6 +130,33 @@ export default function Time() {
     occurred_on: todayISO(),
     hours: "",
     notes: "",
+  });
+
+  const [projectForm, setProjectForm] = React.useState<{
+    name: string;
+    city: string;
+    client_name: string;
+    default_rate_euros: string;
+    billing_type: "hourly" | "fixed";
+    phase_budgets: Record<string, string>;
+  }>({
+    name: "",
+    city: "",
+    client_name: "",
+    default_rate_euros: "75",
+    billing_type: "hourly",
+    phase_budgets: {
+      "schetsontwerp": "",
+      "voorlopig-ontwerp": "",
+      "vo-tekeningen": "",
+      "definitief-ontwerp": "",
+      "do-tekeningen": "",
+      "bouwvoorbereiding": "",
+      "bv-tekeningen": "",
+      "uitvoering": "",
+      "uitvoering-tekeningen": "",
+      "oplevering-nazorg": "",
+    },
   });
 
   const selectedProject = React.useMemo(
@@ -168,6 +197,45 @@ export default function Time() {
         hours: "",
         notes: "",
       }));
+    },
+  });
+
+  const addProject = useMutation({
+    mutationFn: async (payload: {
+      name: string;
+      city?: string;
+      client_name?: string;
+      default_rate_cents: number;
+      billing_type: "hourly" | "fixed";
+      phase_budgets?: Record<string, number>;
+    }) => {
+      return api<Project>("/api/projects", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      setProjectForm({
+        name: "",
+        city: "",
+        client_name: "",
+        default_rate_euros: "75",
+        billing_type: "hourly",
+        phase_budgets: {
+          "schetsontwerp": "",
+          "voorlopig-ontwerp": "",
+          "vo-tekeningen": "",
+          "definitief-ontwerp": "",
+          "do-tekeningen": "",
+          "bouwvoorbereiding": "",
+          "bv-tekeningen": "",
+          "uitvoering": "",
+          "uitvoering-tekeningen": "",
+          "oplevering-nazorg": "",
+        },
+      });
+      setShowProjectForm(false);
     },
   });
 
@@ -272,6 +340,46 @@ export default function Time() {
     URL.revokeObjectURL(url);
   }, [timeEntries]);
 
+  /* ---- Handle project form submit ---- */
+  const handleProjectSubmit = () => {
+    if (!projectForm.name.trim()) return;
+    
+    const rateInCents = Math.round(parseFloat(projectForm.default_rate_euros) * 100);
+    
+    // Converteer fase budgetten naar cents
+    const phaseBudgets: Record<string, number> = {};
+    if (projectForm.billing_type === "fixed") {
+      Object.entries(projectForm.phase_budgets).forEach(([phase, amount]) => {
+        if (amount && parseFloat(amount) > 0) {
+          phaseBudgets[phase] = Math.round(parseFloat(amount) * 100);
+        }
+      });
+    }
+    
+    addProject.mutate({
+      name: projectForm.name.trim(),
+      city: projectForm.city.trim() || undefined,
+      client_name: projectForm.client_name.trim() || undefined,
+      default_rate_cents: rateInCents,
+      billing_type: projectForm.billing_type,
+      phase_budgets: Object.keys(phaseBudgets).length > 0 ? phaseBudgets : undefined,
+    });
+  };
+
+  // Fase shortcodes voor compacte weergave
+  const phaseShortcodes: Record<string, string> = {
+    "schetsontwerp": "SO",
+    "voorlopig-ontwerp": "VO", 
+    "vo-tekeningen": "VO tek",
+    "definitief-ontwerp": "DO",
+    "do-tekeningen": "DO tek",
+    "bouwvoorbereiding": "BV",
+    "bv-tekeningen": "BV tek",
+    "uitvoering": "UT",
+    "uitvoering-tekeningen": "UT tek",
+    "oplevering-nazorg": "Oplev",
+  };
+
   /* ---- UI ---- */
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
@@ -290,6 +398,10 @@ export default function Time() {
           >
             Project overzicht
           </button>
+
+          {/* Excel import knop/modaal */}
+          <ExcelImportTool />
+
           <button
             onClick={exportToCSV}
             className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
@@ -309,10 +421,107 @@ export default function Time() {
 
       {view === "entries" && (
         <>
+          {/* Project toevoegen modal */}
+          {showProjectForm && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold">Nieuw project toevoegen</h3>
+                  <button
+                    onClick={() => setShowProjectForm(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Projectnaam *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Naam van het project"
+                      value={projectForm.name}
+                      onChange={(e) => setProjectForm((f) => ({ ...f, name: e.target.value }))}
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Plaats
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Stad/plaats van het project"
+                      value={projectForm.city}
+                      onChange={(e) => setProjectForm((f) => ({ ...f, city: e.target.value }))}
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Opdrachtgever
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Naam van de opdrachtgever"
+                      value={projectForm.client_name}
+                      onChange={(e) => setProjectForm((f) => ({ ...f, client_name: e.target.value }))}
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Uurtarief (€)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="75.00"
+                      value={projectForm.default_rate_euros}
+                      onChange={(e) => setProjectForm((f) => ({ ...f, default_rate_euros: e.target.value }))}
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mt-6">
+                  <button
+                    onClick={() => setShowProjectForm(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    onClick={handleProjectSubmit}
+                    disabled={!projectForm.name.trim() || addProject.isPending}
+                    className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300 flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    {addProject.isPending ? "Toevoegen..." : "Project toevoegen"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Invoerformulier */}
           <div className="bg-white rounded-lg shadow-sm border p-4">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-semibold">Uren registreren</h2>
+              <button
+                onClick={() => setShowProjectForm(true)}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Project toevoegen
+              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
