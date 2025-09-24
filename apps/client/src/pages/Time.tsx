@@ -13,8 +13,8 @@ type Project = {
   client_name?: string;
   default_rate_cents?: number;
   created_at?: string;
-  archived?: boolean;            // ✅ toegevoegd
-  archived_at?: string | null;   // blijft
+  archived?: boolean;            // nieuw
+  archived_at?: string | null;   // backward compat
   is_archived?: boolean;         // backward compat / computed
 };
 
@@ -32,7 +32,7 @@ type TimeEntry = {
   minutes?: number;
   hours?: number; // client-side only convenience
   notes?: string | null;
-  // optional joined data if backend verstrekt:
+  // optional joined data
   projects?: Project;
   project?: Project;
   phases?: Phase;
@@ -40,7 +40,7 @@ type TimeEntry = {
 };
 
 /* =======================
-   Fallback phases (als /api/phases nog niet bestaat)
+   Fallback phases
 ======================= */
 const FALLBACK_PHASES: Phase[] = [
   { code: "schetsontwerp", name: "Schetsontwerp", sort_order: 1 },
@@ -104,7 +104,6 @@ export default function Time() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Probeer /api/phases; zo niet, gebruik fallback
   const {
     data: phasesData,
     isError: phasesError,
@@ -177,12 +176,12 @@ export default function Time() {
   });
 
   // Filter projecten op basis van archief status
-const filteredProjects = React.useMemo(() => {
-  return projects.filter(project => {
-    const isArchived = !!(project.archived || project.archived_at !== null || project.is_archived);
-    return showArchived ? isArchived : !isArchived;
-  });
-}, [projects, showArchived]);
+  const filteredProjects = React.useMemo(() => {
+    return projects.filter(project => {
+      const isArchived = !!(project.archived || project.archived_at !== null || project.is_archived);
+      return showArchived ? isArchived : !isArchived;
+    });
+  }, [projects, showArchived]);
 
   const selectedProject = React.useMemo(
     () => projects.find((p) => p.id === form.project_id),
@@ -198,7 +197,6 @@ const filteredProjects = React.useMemo(() => {
       hours: string;
       notes?: string;
     }) => {
-      // API verwacht minuten
       const minutes = Math.round(parseFloat(payload.hours) * 60);
       const body = {
         project_id: payload.project_id,
@@ -264,22 +262,21 @@ const filteredProjects = React.useMemo(() => {
     },
   });
 
-  // Nieuw: Archive/Unarchive project mutation
-const toggleArchiveProject = useMutation({
-  mutationFn: async ({ projectId, archive }: { projectId: string; archive: boolean }) => {
-    return api<Project>(`/api/projects/${projectId}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        archived: archive,                                 // ✅ nieuw
-        archived_at: archive ? new Date().toISOString() : null
-      }),
-    });
-  },
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ["projects"] });
-    setActiveDropdown(null);
-  },
-});
+  const toggleArchiveProject = useMutation({
+    mutationFn: async ({ projectId, archive }: { projectId: string; archive: boolean }) => {
+      return api<Project>(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          archived: archive,
+          archived_at: archive ? new Date().toISOString() : null,
+        }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      setActiveDropdown(null);
+    },
+  });
 
   /* ---- Afgeleide data ---- */
   const filteredEntries = React.useMemo(() => {
@@ -305,30 +302,33 @@ const toggleArchiveProject = useMutation({
   }, [timeEntries, filterProject, filterPeriod]);
 
   const enhancedProjectSummary = React.useMemo(() => {
-    // Start met gefilterde projecten (actief of gearchiveerd)
     const summary = filteredProjects.map(project => {
       const projectEntries = timeEntries.filter(entry => entry.project_id === project.id);
       const totalHours = projectEntries.reduce((sum, entry) => {
         return sum + (entry.minutes ? entry.minutes / 60 : entry.hours || 0);
       }, 0);
-      
+
       const rate = (project.default_rate_cents || 0) / 100;
       const totalAmount = totalHours * rate;
-      
-      // Per fase breakdown - start met alle fases
+
       const phaseBreakdown = phases.reduce((acc, phase) => {
         const phaseEntries = projectEntries.filter(entry => entry.phase_code === phase.code);
         const phaseHours = phaseEntries.reduce((sum, entry) => {
           return sum + (entry.minutes ? entry.minutes / 60 : entry.hours || 0);
         }, 0);
-        
+
         acc[phase.code] = {
           phase: phase,
           hours: phaseHours,
           amount: phaseHours * rate,
           entryCount: phaseEntries.length,
-          lastEntry: phaseEntries.length > 0 ? 
-            phaseEntries.sort((a, b) => new Date(b.occurred_on).getTime() - new Date(a.occurred_on).getTime())[0] : null
+          lastEntry:
+            phaseEntries.length > 0
+              ? phaseEntries.sort(
+                  (a, b) =>
+                    new Date(b.occurred_on).getTime() - new Date(a.occurred_on).getTime()
+                )[0]
+              : null,
         };
         return acc;
       }, {} as Record<string, { phase: Phase; hours: number; amount: number; entryCount: number; lastEntry: any }>);
@@ -342,20 +342,22 @@ const toggleArchiveProject = useMutation({
         phaseBreakdown,
         hasEntries: projectEntries.length > 0,
         isArchived,
-        lastActivity: projectEntries.length > 0 ? 
-          projectEntries.sort((a, b) => new Date(b.occurred_on).getTime() - new Date(a.occurred_on).getTime())[0].occurred_on : null
+        lastActivity:
+          projectEntries.length > 0
+            ? projectEntries.sort(
+                (a, b) =>
+                  new Date(b.occurred_on).getTime() - new Date(a.occurred_on).getTime()
+              )[0].occurred_on
+            : null,
       };
     });
 
-    // Sorteer: bij actieve projecten - recente activiteit eerst, bij gearchiveerde - archiveringsdatum
     return summary.sort((a, b) => {
       if (showArchived) {
-        // Gearchiveerde projecten: sorteer op archiveringsdatum (nieuwst eerst)
         const aArchived = new Date(a.project.archived_at || 0).getTime();
         const bArchived = new Date(b.project.archived_at || 0).getTime();
         return bArchived - aArchived;
       } else {
-        // Actieve projecten: sorteer op activiteit
         if (a.hasEntries && !b.hasEntries) return -1;
         if (!a.hasEntries && b.hasEntries) return 1;
         if (a.lastActivity && b.lastActivity) {
@@ -366,7 +368,6 @@ const toggleArchiveProject = useMutation({
     });
   }, [filteredProjects, timeEntries, phases, showArchived]);
 
-  // State voor uitklapbare projecten
   const [expandedProjects, setExpandedProjects] = React.useState<Set<string>>(new Set());
 
   /* ---- Export CSV ---- */
@@ -395,7 +396,9 @@ const toggleArchiveProject = useMutation({
         EUR(hours * rate),
       ];
     });
-    const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const csv = [headers, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -408,13 +411,12 @@ const toggleArchiveProject = useMutation({
     URL.revokeObjectURL(url);
   }, [timeEntries]);
 
-  /* ---- Handle project form submit ---- */
+  /* ---- Handlers ---- */
   const handleProjectSubmit = () => {
     if (!projectForm.name.trim()) return;
-    
+
     const rateInCents = Math.round(parseFloat(projectForm.default_rate_euros) * 100);
-    
-    // Converteer fase budgetten naar cents
+
     const phaseBudgets: Record<string, number> = {};
     if (projectForm.billing_type === "fixed") {
       Object.entries(projectForm.phase_budgets).forEach(([phase, amount]) => {
@@ -423,7 +425,7 @@ const toggleArchiveProject = useMutation({
         }
       });
     }
-    
+
     addProject.mutate({
       name: projectForm.name.trim(),
       city: projectForm.city.trim() || undefined,
@@ -437,11 +439,8 @@ const toggleArchiveProject = useMutation({
   const toggleProjectExpansion = (projectId: string) => {
     setExpandedProjects(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(projectId)) {
-        newSet.delete(projectId);
-      } else {
-        newSet.add(projectId);
-      }
+      if (newSet.has(projectId)) newSet.delete(projectId);
+      else newSet.add(projectId);
       return newSet;
     });
   };
@@ -449,7 +448,7 @@ const toggleArchiveProject = useMutation({
   const handleArchiveToggle = (projectId: string, isCurrentlyArchived: boolean) => {
     toggleArchiveProject.mutate({
       projectId,
-      archive: !isCurrentlyArchived
+      archive: !isCurrentlyArchived,
     });
   };
 
@@ -506,9 +505,7 @@ const toggleArchiveProject = useMutation({
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Projectnaam *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Projectnaam *</label>
                     <input
                       type="text"
                       placeholder="Naam van het project"
@@ -521,9 +518,7 @@ const toggleArchiveProject = useMutation({
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Plaats
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Plaats</label>
                       <input
                         type="text"
                         placeholder="Stad/plaats"
@@ -534,9 +529,7 @@ const toggleArchiveProject = useMutation({
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Opdrachtgever
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Opdrachtgever</label>
                       <input
                         type="text"
                         placeholder="Naam opdrachtgever"
@@ -549,9 +542,7 @@ const toggleArchiveProject = useMutation({
 
                   {/* Facturatie type */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Facturatie methode
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Facturatie methode</label>
                     <div className="flex gap-4">
                       <label className="flex items-center">
                         <input
@@ -579,9 +570,7 @@ const toggleArchiveProject = useMutation({
                   {/* Uurtarief (alleen bij hourly) */}
                   {projectForm.billing_type === "hourly" && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Uurtarief (€)
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Uurtarief (€)</label>
                       <input
                         type="number"
                         step="0.01"
@@ -593,7 +582,129 @@ const toggleArchiveProject = useMutation({
                     </div>
                   )}
 
-                  {/* Fase */}
+                  {/* honoraria (alleen bij fixed) */}
+                  {projectForm.billing_type === "fixed" && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Afgesproken honorarium per fase (€)
+                      </label>
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <div className="grid grid-cols-2 gap-3">
+                          {phases
+                            .slice()
+                            .sort((a, b) => a.sort_order - b.sort_order)
+                            .map((phase) => (
+                              <div key={phase.code} className="flex items-center gap-2">
+                                <span className="text-sm font-medium w-20 shrink-0">
+                                  {phaseShortcodes[phase.code] || phase.code}:
+                                </span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="0"
+                                  value={projectForm.phase_budgets[phase.code] || ""}
+                                  onChange={(e) =>
+                                    setProjectForm((f) => ({
+                                      ...f,
+                                      phase_budgets: {
+                                        ...f.phase_budgets,
+                                        [phase.code]: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                                />
+                              </div>
+                            ))}
+                        </div>
+                        <div className="mt-2 text-xs text-gray-600">
+                          Vul alleen de fases in waarvoor een vast bedrag is afgesproken. Lege velden worden overgeslagen.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Totaaloverzicht bij fixed */}
+                  {projectForm.billing_type === "fixed" && (
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <div className="text-sm text-blue-800">
+                        <span className="font-medium">Totaal project honorarium: </span>
+                        {EUR(
+                          Object.values(projectForm.phase_budgets)
+                            .filter((amount) => amount && parseFloat(amount) > 0)
+                            .reduce((sum, amount) => sum + parseFloat(amount), 0)
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-2 mt-6">
+                  <button
+                    onClick={() => setShowProjectForm(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    onClick={handleProjectSubmit}
+                    disabled={!projectForm.name.trim() || addProject.isPending}
+                    className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300 flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    {addProject.isPending ? "Toevoegen..." : "Project toevoegen"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Invoerformulier (uren) */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Uren registreren</h2>
+                <p className="text-sm text-gray-600 mt-1">Voeg nieuwe uren toe aan je projecten</p>
+              </div>
+              <button
+                onClick={() => setShowProjectForm(true)}
+                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                Project toevoegen
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Project */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Project *</label>
+                <div className="relative">
+                  <select
+                    value={form.project_id}
+                    onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+                    required
+                  >
+                    <option value="">— Selecteer project —</option>
+                    {projects
+                      .filter((p) => !p.archived && !p.archived_at && !p.is_archived)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                          {p.city ? ` (${p.city})` : ""}
+                        </option>
+                      ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fase */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">Fase *</label>
                 <div className="relative">
@@ -684,9 +795,18 @@ const toggleArchiveProject = useMutation({
                   <div className="flex-1">
                     <h4 className="font-medium text-gray-900 mb-1">Kostenoverzicht</h4>
                     <div className="text-sm text-gray-700 space-y-1">
-                      <div><strong>Project:</strong> {selectedProject.name} {selectedProject.city ? `(${selectedProject.city})` : ""}</div>
-                      <div><strong>Uurtarief:</strong> {EUR((selectedProject.default_rate_cents || 0) / 100)}</div>
-                      <div><strong>Bedrag:</strong> <span className="text-green-600 font-semibold">{EUR((parseFloat(form.hours || "0") || 0) * ((selectedProject.default_rate_cents || 0) / 100))}</span></div>
+                      <div>
+                        <strong>Project:</strong> {selectedProject.name} {selectedProject.city ? `(${selectedProject.city})` : ""}
+                      </div>
+                      <div>
+                        <strong>Uurtarief:</strong> {EUR((selectedProject.default_rate_cents || 0) / 100)}
+                      </div>
+                      <div>
+                        <strong>Bedrag:</strong>{" "}
+                        <span className="text-green-600 font-semibold">
+                          {EUR((parseFloat(form.hours || "0") || 0) * ((selectedProject.default_rate_cents || 0) / 100))}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -708,7 +828,9 @@ const toggleArchiveProject = useMutation({
                   <option value="">Alle projecten</option>
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name}{p.city ? ` (${p.city})` : ""}{(p.archived || p.archived_at || p.is_archived) ? " (gearchiveerd)" : ""}
+                      {p.name}
+                      {p.city ? ` (${p.city})` : ""}
+                      {(p.archived || p.archived_at || p.is_archived) ? " (gearchiveerd)" : ""}
                     </option>
                   ))}
                 </select>
@@ -801,22 +923,22 @@ const toggleArchiveProject = useMutation({
                 <p className="text-sm text-gray-600 mt-1">Schakel tussen actieve en gearchiveerde projecten</p>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`text-sm ${!showArchived ? 'font-medium text-gray-900' : 'text-gray-500'}`}>
+                <span className={`text-sm ${!showArchived ? "font-medium text-gray-900" : "text-gray-500"}`}>
                   Actieve projecten
                 </span>
                 <button
                   onClick={() => setShowArchived(!showArchived)}
                   className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                    showArchived ? 'bg-blue-600' : 'bg-gray-200'
+                    showArchived ? "bg-blue-600" : "bg-gray-200"
                   }`}
                 >
                   <span
                     className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out ${
-                      showArchived ? 'translate-x-5' : 'translate-x-0'
+                      showArchived ? "translate-x-5" : "translate-x-0"
                     }`}
                   />
                 </button>
-                <span className={`text-sm ${showArchived ? 'font-medium text-gray-900' : 'text-gray-500'}`}>
+                <span className={`text-sm ${showArchived ? "font-medium text-gray-900" : "text-gray-500"}`}>
                   Gearchiveerde projecten
                 </span>
               </div>
@@ -838,29 +960,31 @@ const toggleArchiveProject = useMutation({
                 {showArchived ? "Geen gearchiveerde projecten" : "Nog geen projecten"}
               </h3>
               <p className="text-gray-600">
-                {showArchived 
-                  ? "Er zijn nog geen projecten gearchiveerd" 
-                  : "Maak je eerste project aan om te beginnen met urenregistratie"
-                }
+                {showArchived
+                  ? "Er zijn nog geen projecten gearchiveerd"
+                  : "Maak je eerste project aan om te beginnen met urenregistratie"}
               </p>
             </div>
           ) : (
             <div className="space-y-4">
               {enhancedProjectSummary.map((summary) => {
                 const isExpanded = expandedProjects.has(summary.project.id);
-                
+
                 return (
-                  <div key={summary.project.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+                  <div
+                    key={summary.project.id}
+                    className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow"
+                  >
                     {/* Project Header */}
                     <div className="p-6">
                       <div className="flex items-center justify-between">
-                        <div 
+                        <div
                           className="flex-1 min-w-0 cursor-pointer"
                           onClick={() => toggleProjectExpansion(summary.project.id)}
                         >
                           <div className="flex items-center gap-3 mb-2">
                             <h3 className="text-lg font-semibold text-gray-900 truncate">{summary.project.name}</h3>
-                            
+
                             {/* Status indicators */}
                             <div className="flex items-center gap-2">
                               {summary.isArchived ? (
@@ -881,7 +1005,7 @@ const toggleArchiveProject = useMutation({
                               )}
                             </div>
                           </div>
-                          
+
                           <div className="flex items-center gap-6 text-sm text-gray-600">
                             {summary.project.city && (
                               <div className="flex items-center gap-1">
@@ -916,16 +1040,17 @@ const toggleArchiveProject = useMutation({
                             )}
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center gap-6">
                           {/* Statistieken */}
                           <div className="text-right">
                             <div className="text-2xl font-bold text-gray-900">
-                              {summary.totalHours.toFixed(1)}<span className="text-sm font-normal text-gray-500">h</span>
+                              {summary.totalHours.toFixed(1)}
+                              <span className="text-sm font-normal text-gray-500">h</span>
                             </div>
                             <div className="text-sm text-gray-600">Totaal uren</div>
                           </div>
-                          
+
                           <div className="text-right">
                             <div className="text-2xl font-bold text-green-600">{EUR(summary.totalAmount)}</div>
                             <div className="text-sm text-gray-600">Totaal bedrag</div>
@@ -962,16 +1087,16 @@ const toggleArchiveProject = useMutation({
                               </div>
                             )}
                           </div>
-                          
+
                           {/* Expand/Collapse indicator */}
-                          <div 
+                          <div
                             className="ml-2 cursor-pointer"
                             onClick={() => toggleProjectExpansion(summary.project.id)}
                           >
-                            <svg 
-                              className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
-                              fill="none" 
-                              stroke="currentColor" 
+                            <svg
+                              className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                              fill="none"
+                              stroke="currentColor"
                               viewBox="0 0 24 24"
                             >
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -988,43 +1113,39 @@ const toggleArchiveProject = useMutation({
                           <div className="mb-4">
                             <h4 className="text-sm font-medium text-gray-900 mb-3">Projectfases</h4>
                           </div>
-                          
+
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {Object.entries(summary.phaseBreakdown)
-                              .sort(([,a], [,b]) => a.phase.sort_order - b.phase.sort_order)
+                              .sort(([, a], [, b]) => a.phase.sort_order - b.phase.sort_order)
                               .map(([phaseCode, phaseData]) => {
                                 const isActive = phaseData.hours > 0;
-                                
+
                                 return (
-                                  <div 
-                                    key={phaseCode} 
+                                  <div
+                                    key={phaseCode}
                                     className={`p-4 rounded-lg border-2 transition-all ${
-                                      isActive 
-                                        ? 'bg-white border-blue-200 shadow-sm' 
-                                        : 'bg-gray-50 border-gray-200 hover:border-gray-300'
+                                      isActive
+                                        ? "bg-white border-blue-200 shadow-sm"
+                                        : "bg-gray-50 border-gray-200 hover:border-gray-300"
                                     }`}
                                   >
                                     <div className="flex items-center justify-between mb-2">
-                                      <h5 className={`font-medium text-sm ${isActive ? 'text-gray-900' : 'text-gray-600'}`}>
+                                      <h5 className={`font-medium text-sm ${isActive ? "text-gray-900" : "text-gray-600"}`}>
                                         {phaseData.phase.name}
                                       </h5>
-                                      {isActive && (
-                                        <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
-                                      )}
+                                      {isActive && <span className="w-2 h-2 bg-blue-400 rounded-full"></span>}
                                     </div>
-                                    
+
                                     <div className="space-y-1">
-                                      <div className={`text-lg font-bold ${isActive ? 'text-blue-600' : 'text-gray-400'}`}>
-                                        {phaseData.hours > 0 ? `${phaseData.hours.toFixed(1)}h` : '0h'}
+                                      <div className={`text-lg font-bold ${isActive ? "text-blue-600" : "text-gray-400"}`}>
+                                        {phaseData.hours > 0 ? `${phaseData.hours.toFixed(1)}h` : "0h"}
                                       </div>
-                                      
-                                      {isActive && (
+
+                                      {isActive ? (
                                         <div className="text-sm text-gray-600">
                                           {EUR(phaseData.amount)} • {phaseData.entryCount} entries
                                         </div>
-                                      )}
-                                      
-                                      {!isActive && (
+                                      ) : (
                                         <div className="text-xs text-gray-500">Nog geen uren</div>
                                       )}
                                     </div>
@@ -1043,133 +1164,13 @@ const toggleArchiveProject = useMutation({
         </div>
       )}
 
-      {/* Click outside handler for dropdowns */}
+      {/* Click outside handler for dropdown menus */}
       {activeDropdown && (
-        <div 
-          className="fixed inset-0 z-30" 
+        <div
+          className="fixed inset-0 z-30"
           onClick={() => setActiveDropdown(null)}
         />
       )}
     </div>
   );
-} honoraria (alleen bij fixed) */}
-                  {projectForm.billing_type === "fixed" && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Afgesproken honorarium per fase (€)
-                      </label>
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <div className="grid grid-cols-2 gap-3">
-                          {phases
-                            .slice()
-                            .sort((a, b) => a.sort_order - b.sort_order)
-                            .map((phase) => (
-                              <div key={phase.code} className="flex items-center gap-2">
-                                <span className="text-sm font-medium w-20 shrink-0">
-                                  {phaseShortcodes[phase.code] || phase.code}:
-                                </span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  placeholder="0"
-                                  value={projectForm.phase_budgets[phase.code] || ""}
-                                  onChange={(e) => 
-                                    setProjectForm((f) => ({
-                                      ...f,
-                                      phase_budgets: {
-                                        ...f.phase_budgets,
-                                        [phase.code]: e.target.value
-                                      }
-                                    }))
-                                  }
-                                  className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
-                                />
-                              </div>
-                            ))}
-                        </div>
-                        <div className="mt-2 text-xs text-gray-600">
-                          Vul alleen de fases in waarvoor een vast bedrag is afgesproken. Lege velden worden overgeslagen.
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Totaaloverzicht bij fixed */}
-                  {projectForm.billing_type === "fixed" && (
-                    <div className="bg-blue-50 p-3 rounded-lg">
-                      <div className="text-sm text-blue-800">
-                        <span className="font-medium">Totaal project honorarium: </span>
-                        {EUR(
-                          Object.values(projectForm.phase_budgets)
-                            .filter(amount => amount && parseFloat(amount) > 0)
-                            .reduce((sum, amount) => sum + parseFloat(amount), 0)
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-2 mt-6">
-                  <button
-                    onClick={() => setShowProjectForm(false)}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
-                  >
-                    Annuleren
-                  </button>
-                  <button
-                    onClick={handleProjectSubmit}
-                    disabled={!projectForm.name.trim() || addProject.isPending}
-                    className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300 flex items-center justify-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    {addProject.isPending ? "Toevoegen..." : "Project toevoegen"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Invoerformulier */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900">Uren registreren</h2>
-                <p className="text-sm text-gray-600 mt-1">Voeg nieuwe uren toe aan je projecten</p>
-              </div>
-              <button
-                onClick={() => setShowProjectForm(true)}
-                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-all"
-              >
-                <Plus className="w-4 h-4" />
-                Project toevoegen
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              {/* Project */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Project *</label>
-                <div className="relative">
-                  <select
-                    value={form.project_id}
-                    onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
-                    required
-                  >
-                    <option value="">— Selecteer project —</option>
-                    {/* Alleen actieve projecten tonen in het formulier */}
-                    {projects.filter(p => !p.archived && !p.archived_at && !p.is_archived).map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}{p.city ? ` (${p.city})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-
-              {/* Fase
+}

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { 
-  Clock, 
-  Calendar, 
-  CheckSquare, 
+import {
+  Clock,
+  Calendar,
+  CheckSquare,
   Plus,
   Euro,
   Activity,
@@ -16,7 +16,7 @@ import {
   ExternalLink,
   Lightbulb,
   Upload,
-  Image
+  Image,
 } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -68,22 +68,20 @@ type Idea = {
 };
 
 /* =======================
-   Helper Functions
+   Helpers
 ======================= */
-const formatTime = (dateString: string) => {
-  return new Date(dateString).toLocaleTimeString("nl-NL", { 
-    hour: "2-digit", 
-    minute: "2-digit" 
+const formatTime = (dateString: string) =>
+  new Date(dateString).toLocaleTimeString("nl-NL", {
+    hour: "2-digit",
+    minute: "2-digit",
   });
-};
 
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString("nl-NL", { 
+const formatDate = (dateString: string) =>
+  new Date(dateString).toLocaleDateString("nl-NL", {
     weekday: "short",
-    month: "short", 
-    day: "numeric" 
+    month: "short",
+    day: "numeric",
   });
-};
 
 const isToday = (dateString: string) => {
   const today = new Date().toDateString();
@@ -100,17 +98,23 @@ const isTomorrow = (dateString: string) => {
 
 const getPriorityColor = (priority: number) => {
   switch (priority) {
-    case 1: return "text-red-600 bg-red-50 border-red-200";
-    case 2: return "text-orange-600 bg-orange-50 border-orange-200";
-    default: return "text-gray-600 bg-gray-50 border-gray-200";
+    case 1:
+      return "text-red-600 bg-red-50 border-red-200";
+    case 2:
+      return "text-orange-600 bg-orange-50 border-orange-200";
+    default:
+      return "text-gray-600 bg-gray-50 border-gray-200";
   }
 };
 
 const getPriorityText = (priority: number) => {
   switch (priority) {
-    case 1: return "Hoog";
-    case 2: return "Medium";
-    default: return "Laag";
+    case 1:
+      return "Hoog";
+    case 2:
+      return "Medium";
+    default:
+      return "Laag";
   }
 };
 
@@ -120,7 +124,7 @@ const getPriorityText = (priority: number) => {
 export default function Dashboard() {
   const queryClient = useQueryClient();
   const today = new Date().toISOString().split("T")[0];
-  
+
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showCalendarAuth, setShowCalendarAuth] = useState(false);
@@ -133,7 +137,7 @@ export default function Dashboard() {
     priority: 3,
     due_date: "",
     project_id: "",
-    type: "work" as "work" | "personal"
+    type: "work" as "work" | "personal",
   });
 
   /* ---- Idea Form State ---- */
@@ -142,7 +146,7 @@ export default function Dashboard() {
     description: "",
     category: "other" as "business" | "project" | "personal" | "creative" | "other",
     priority: "medium" as "low" | "medium" | "high",
-    image: null as File | null
+    image: null as File | null,
   });
 
   useEffect(() => {
@@ -183,10 +187,10 @@ export default function Dashboard() {
         hoursToday: 7.5,
         hoursWeek: 32.5,
         openBilling: 2450,
-        activeTasks: tasks.filter(t => t.status !== "done").length,
+        activeTasks: tasks.filter((t) => t.status !== "done").length,
         stepsToday: 8432,
         workoutsToday: 2,
-        energyLevel: 4
+        energyLevel: 4,
       };
     },
     staleTime: 5 * 60 * 1000,
@@ -197,7 +201,7 @@ export default function Dashboard() {
     mutationFn: (newTask: Partial<Task>) =>
       api<Task>("/api/tasks", {
         method: "POST",
-        body: JSON.stringify(newTask)
+        body: JSON.stringify(newTask),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -207,21 +211,21 @@ export default function Dashboard() {
         priority: 3,
         due_date: "",
         project_id: "",
-        type: "work"
+        type: "work",
       });
       setShowTaskForm(false);
-    }
+    },
   });
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, ...data }: Partial<Task> & { id: string }) =>
       api<Task>(`/api/tasks/${id}`, {
         method: "PATCH",
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    }
+    },
   });
 
   const connectCalendarMutation = useMutation({
@@ -229,25 +233,20 @@ export default function Dashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
       setShowCalendarAuth(false);
-    }
+    },
   });
 
   const addIdeaMutation = useMutation({
     mutationFn: async (newIdea: Partial<Idea> & { image?: File }) => {
       const formData = new FormData();
-      formData.append('title', newIdea.title || '');
-      formData.append('description', newIdea.description || '');
-      formData.append('category', newIdea.category || 'other');
-      formData.append('priority', newIdea.priority || 'medium');
-      
-      if (newIdea.image) {
-        formData.append('image', newIdea.image);
-      }
+      formData.append("title", newIdea.title || "");
+      formData.append("description", newIdea.description || "");
+      formData.append("category", (newIdea.category as string) || "other");
+      formData.append("priority", (newIdea.priority as string) || "medium");
+      if (newIdea.image) formData.append("image", newIdea.image);
 
-      return fetch('/api/ideas', {
-        method: 'POST',
-        body: formData,
-      }).then(res => res.json());
+      const res = await fetch("/api/ideas", { method: "POST", body: formData });
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ideas"] });
@@ -256,43 +255,41 @@ export default function Dashboard() {
         description: "",
         category: "other",
         priority: "medium",
-        image: null
+        image: null,
       });
       setShowIdeaForm(false);
-    }
+    },
   });
 
-  /* ---- Event Handlers ---- */
+  /* ---- Handlers ---- */
   const handleTaskSubmit = () => {
     if (!taskForm.title.trim()) return;
-    
-    const newTask = {
+
+    const payload = {
       ...taskForm,
       status: "todo" as const,
       project_id: taskForm.project_id || null,
       due_date: taskForm.due_date || null,
-      notes: taskForm.notes || null
+      notes: taskForm.notes || null,
     };
-    
-    addTaskMutation.mutate(newTask);
+    addTaskMutation.mutate(payload);
   };
 
   const handleIdeaSubmit = () => {
     if (!ideaForm.title.trim()) return;
-    
     addIdeaMutation.mutate({
       title: ideaForm.title,
       description: ideaForm.description,
       category: ideaForm.category,
       priority: ideaForm.priority,
-      image: ideaForm.image
+      image: ideaForm.image || undefined,
     });
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      setIdeaForm(f => ({ ...f, image: file }));
+    if (file && file.type.startsWith("image/")) {
+      setIdeaForm((f) => ({ ...f, image: file }));
     }
   };
 
@@ -302,20 +299,26 @@ export default function Dashboard() {
   };
 
   /* ---- Derived Data ---- */
-  const todayTasks = tasks.filter(task => 
-    isToday(task.created_at) || (task.due_date && isToday(task.due_date))
+  const todayTasks = tasks.filter(
+    (task) => isToday(task.created_at) || (task.due_date && isToday(task.due_date))
   );
-  
+
   const upcomingTasks = tasks
-    .filter(task => task.status !== "done" && task.due_date)
-    .sort((a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime())
+    .filter((task) => task.status !== "done" && task.due_date)
+    .sort(
+      (a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime()
+    )
     .slice(0, 5);
 
   const upcomingEvents = todayEvents
-    .filter(event => new Date(event.start_time) > currentTime)
-    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+    .filter((event) => new Date(event.start_time) > currentTime)
+    .sort(
+      (a, b) =>
+        new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+    )
     .slice(0, 3);
 
+  /* ---- UI ---- */
   return (
     <div className="space-y-8">
       {/* Header with Time */}
@@ -325,19 +328,19 @@ export default function Dashboard() {
             Dashboard
           </h1>
           <p className="text-gray-600 mt-1">
-            {currentTime.toLocaleDateString("nl-NL", { 
-              weekday: "long", 
-              year: "numeric", 
-              month: "long", 
-              day: "numeric" 
+            {currentTime.toLocaleDateString("nl-NL", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
             })}
           </p>
         </div>
         <div className="text-right">
           <div className="text-3xl font-bold text-gray-900">
-            {currentTime.toLocaleTimeString("nl-NL", { 
-              hour: "2-digit", 
-              minute: "2-digit" 
+            {currentTime.toLocaleTimeString("nl-NL", {
+              hour: "2-digit",
+              minute: "2-digit",
             })}
           </div>
           <div className="text-sm text-gray-500">Live tijd</div>
@@ -412,7 +415,9 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Actieve Taken</p>
-              <p className="text-2xl font-bold text-green-600">{tasks.filter(t => t.status !== "done").length}</p>
+              <p className="text-2xl font-bold text-green-600">
+                {tasks.filter((t) => t.status !== "done").length}
+              </p>
             </div>
             <CheckSquare className="w-8 h-8 text-green-500" />
           </div>
@@ -442,7 +447,9 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Stappen</p>
-              <p className="text-2xl font-bold text-purple-600">{stats?.stepsToday?.toLocaleString() || 0}</p>
+              <p className="text-2xl font-bold text-purple-600">
+                {stats?.stepsToday?.toLocaleString() || 0}
+              </p>
             </div>
             <Activity className="w-8 h-8 text-purple-500" />
           </div>
@@ -451,7 +458,6 @@ export default function Dashboard() {
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
         {/* Tasks Section */}
         <div className="lg:col-span-2 space-y-6">
           {/* Today's Tasks */}
@@ -463,8 +469,281 @@ export default function Dashboard() {
                   Taken Vandaag
                 </h2>
                 <span className="text-sm text-gray-500">
-                  {todayTasks.filter(t => t.status === "done").length} van {todayTasks.length} voltooid
+                  {todayTasks.filter((t) => t.status === "done").length} van {todayTasks.length} voltooid
                 </span>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {todayTasks.length === 0 ? (
+                <div className="text-center py-8">
+                  <CheckSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Nog geen taken voor vandaag
+                  </h3>
+                  <button
+                    onClick={() => setShowTaskForm(true)}
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    Voeg je eerste taak toe
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {todayTasks.slice(0, 5).map((task) => (
+                    <div
+                      key={task.id}
+                      className={`flex items-start gap-3 p-4 rounded-lg border-2 transition-all hover:shadow-sm ${
+                        task.status === "done"
+                          ? "bg-green-50 border-green-200"
+                          : "bg-white border-gray-200"
+                      }`}
+                    >
+                      <button onClick={() => toggleTaskComplete(task)} className="mt-0.5">
+                        {task.status === "done" ? (
+                          <CheckCircle className="w-5 h-5 text-green-500" />
+                        ) : (
+                          <Circle className="w-5 h-5 text-gray-400 hover:text-green-400" />
+                        )}
+                      </button>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3
+                            className={`font-medium ${
+                              task.status === "done" ? "line-through text-gray-500" : "text-gray-900"
+                            }`}
+                          >
+                            {task.title}
+                          </h3>
+                          <span
+                            className={`px-2 py-1 text-xs rounded-full border ${getPriorityColor(
+                              task.priority
+                            )}`}
+                          >
+                            {getPriorityText(task.priority)}
+                          </span>
+                          <span
+                            className={`px-2 py-1 text-xs rounded-full ${
+                              task.type === "work"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-purple-100 text-purple-800"
+                            }`}
+                          >
+                            {task.type === "work" ? "Werk" : "Privé"}
+                          </span>
+                        </div>
+
+                        {task.notes && <p className="text-sm text-gray-600 mb-2">{task.notes}</p>}
+
+                        {task.projects && (
+                          <div className="text-xs text-gray-500">📁 {task.projects.name}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Upcoming Tasks */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+            <div className="p-6 border-b border-gray-100">
+              <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-orange-500" />
+                Aankomende Taken
+              </h2>
+            </div>
+
+            <div className="p-6">
+              {upcomingTasks.length === 0 ? (
+                <p className="text-gray-600 text-center py-4">Geen taken met deadlines</p>
+              ) : (
+                <div className="space-y-3">
+                  {upcomingTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="flex items-center justify-between p-3 border border-gray-200 rounded-lg"
+                    >
+                      <div className="flex-1">
+                        <h3 className="font-medium text-gray-900">{task.title}</h3>
+                        {task.projects && (
+                          <p className="text-sm text-gray-600">📁 {task.projects.name}</p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <div
+                          className={`text-sm font-medium ${
+                            task.due_date && isToday(task.due_date)
+                              ? "text-red-600"
+                              : task.due_date && isTomorrow(task.due_date)
+                              ? "text-orange-600"
+                              : "text-gray-600"
+                          }`}
+                        >
+                          {task.due_date &&
+                            (isToday(task.due_date)
+                              ? "Vandaag"
+                              : isTomorrow(task.due_date)
+                              ? "Morgen"
+                              : formatDate(task.due_date))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Sidebar */}
+        <div className="space-y-6">
+          {/* Today's Schedule */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+            <div className="p-6 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5 text-green-500" />
+                Agenda Vandaag
+              </h2>
+            </div>
+
+            <div className="p-6">
+              {upcomingEvents.length === 0 ? (
+                <div className="text-center py-6">
+                  <CalendarIcon className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-gray-600 text-sm mb-3">Geen afspraken vandaag</p>
+                  <button
+                    onClick={() => setShowCalendarAuth(true)}
+                    className="text-blue-600 hover:text-blue-800 text-sm"
+                  >
+                    Koppel Gmail agenda
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {upcomingEvents.map((event) => (
+                    <div key={event.id} className="border-l-4 border-blue-500 pl-4 py-2">
+                      <div className="font-medium text-gray-900">{event.title}</div>
+                      <div className="text-sm text-gray-600">
+                        {formatTime(event.start_time)} - {formatTime(event.end_time)}
+                      </div>
+                      {event.location && (
+                        <div className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                          <MapPin className="w-3 h-3" />
+                          {event.location}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Health Summary */}
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl border border-blue-200 p-6">
+            <h2 className="text-lg font-semibold text-blue-900 mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              Health Snapshot
+            </h2>
+
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-blue-700">Energie Level:</span>
+                <div className="flex">
+                  {Array.from({ length: 5 }, (_, i) => (
+                    <Star
+                      key={i}
+                      className={`w-4 h-4 ${
+                        i < (stats?.energyLevel || 0)
+                          ? "fill-yellow-400 text-yellow-400"
+                          : "text-gray-300"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-blue-700">Stappen:</span>
+                <span className="font-medium text-blue-900">
+                  {stats?.stepsToday?.toLocaleString() || 0}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-blue-700">Workouts:</span>
+                <span className="font-medium text-blue-900">{stats?.workoutsToday || 0}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Task Form Modal */}
+      {showTaskForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-semibold">Nieuwe Taak Aanmaken</h3>
+              <button onClick={() => setShowTaskForm(false)}>
+                <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Titel *</label>
+                <input
+                  type="text"
+                  value={taskForm.title}
+                  onChange={(e) => setTaskForm((f) => ({ ...f, title: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Wat moet er gedaan worden?"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Notities</label>
+                <textarea
+                  value={taskForm.notes}
+                  onChange={(e) => setTaskForm((f) => ({ ...f, notes: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent h-24 resize-none"
+                  placeholder="Aanvullende details..."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                  <select
+                    value={taskForm.type}
+                    onChange={(e) =>
+                      setTaskForm((f) => ({ ...f, type: e.target.value as "work" | "personal" }))
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="work">Werk</option>
+                    <option value="personal">Privé</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Prioriteit</label>
+                  <select
+                    value={taskForm.priority}
+                    onChange={(e) =>
+                      setTaskForm((f) => ({ ...f, priority: parseInt(e.target.value) }))
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value={3}>Laag</option>
+                    <option value={2}>Medium</option>
+                    <option value={1}>Hoog</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -472,7 +751,7 @@ export default function Dashboard() {
                 <input
                   type="date"
                   value={taskForm.due_date}
-                  onChange={(e) => setTaskForm(f => ({...f, due_date: e.target.value}))}
+                  onChange={(e) => setTaskForm((f) => ({ ...f, due_date: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -481,11 +760,11 @@ export default function Dashboard() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
                 <select
                   value={taskForm.project_id}
-                  onChange={(e) => setTaskForm(f => ({...f, project_id: e.target.value}))}
+                  onChange={(e) => setTaskForm((f) => ({ ...f, project_id: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">Geen project</option>
-                  {projects.map(project => (
+                  {projects.map((project) => (
                     <option key={project.id} value={project.id}>
                       {project.name} {project.city ? `(${project.city})` : ""}
                     </option>
@@ -533,7 +812,7 @@ export default function Dashboard() {
                 <input
                   type="text"
                   value={ideaForm.title}
-                  onChange={(e) => setIdeaForm(f => ({...f, title: e.target.value}))}
+                  onChange={(e) => setIdeaForm((f) => ({ ...f, title: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
                   placeholder="Wat is je idee in één zin?"
                 />
@@ -543,7 +822,7 @@ export default function Dashboard() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Beschrijving</label>
                 <textarea
                   value={ideaForm.description}
-                  onChange={(e) => setIdeaForm(f => ({...f, description: e.target.value}))}
+                  onChange={(e) => setIdeaForm((f) => ({ ...f, description: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-yellow-500 focus:border-transparent h-32 resize-none"
                   placeholder="Werk je idee uit... wat houdt het in? Waarom is het interessant?"
                 />
@@ -554,7 +833,9 @@ export default function Dashboard() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Categorie</label>
                   <select
                     value={ideaForm.category}
-                    onChange={(e) => setIdeaForm(f => ({...f, category: e.target.value as any}))}
+                    onChange={(e) =>
+                      setIdeaForm((f) => ({ ...f, category: e.target.value as any }))
+                    }
                     className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
                   >
                     <option value="business">Business</option>
@@ -569,7 +850,9 @@ export default function Dashboard() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Urgentie</label>
                   <select
                     value={ideaForm.priority}
-                    onChange={(e) => setIdeaForm(f => ({...f, priority: e.target.value as any}))}
+                    onChange={(e) =>
+                      setIdeaForm((f) => ({ ...f, priority: e.target.value as any }))
+                    }
                     className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
                   >
                     <option value="low">Ooit eens</option>
@@ -581,7 +864,9 @@ export default function Dashboard() {
 
               {/* Image Upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Afbeelding (optioneel)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Afbeelding (optioneel)
+                </label>
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-yellow-400 transition-colors">
                   {ideaForm.image ? (
                     <div className="space-y-3">
@@ -596,7 +881,7 @@ export default function Dashboard() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setIdeaForm(f => ({ ...f, image: null }))}
+                        onClick={() => setIdeaForm((f) => ({ ...f, image: null }))}
                         className="text-red-600 hover:text-red-800 text-sm"
                       >
                         Verwijderen
@@ -660,7 +945,7 @@ export default function Dashboard() {
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
                 <Calendar className="w-8 h-8 text-green-600" />
               </div>
-              
+
               <div>
                 <h4 className="text-lg font-medium text-gray-900 mb-2">Verbind met Google Agenda</h4>
                 <p className="text-gray-600 text-sm">
@@ -677,17 +962,18 @@ export default function Dashboard() {
                   <ExternalLink className="w-4 h-4" />
                   {connectCalendarMutation.isPending ? "Verbinden..." : "Verbind met Google"}
                 </button>
-                
+
                 <button
                   onClick={() => setShowCalendarAuth(false)}
-                  className="w-full border border-gray-300 px-6 py-3 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="w-full border border-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  Misschien later
+                  Annuleren
                 </button>
-              </div>
 
-              <div className="text-xs text-gray-500 pt-2">
-                Je wordt doorgestuurd naar Google om toestemming te geven
+                <p className="text-xs text-gray-500">
+                  We openen een nieuw venster voor Google OAuth. Na het verbinden worden je afspraken
+                  automatisch gesynchroniseerd.
+                </p>
               </div>
             </div>
           </div>
@@ -696,245 +982,3 @@ export default function Dashboard() {
     </div>
   );
 }
-            </div>
-            
-            <div className="p-6">
-              {todayTasks.length === 0 ? (
-                <div className="text-center py-8">
-                  <CheckSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Nog geen taken voor vandaag</h3>
-                  <button
-                    onClick={() => setShowTaskForm(true)}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    Voeg je eerste taak toe
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {todayTasks.slice(0, 5).map(task => (
-                    <div
-                      key={task.id}
-                      className={`flex items-start gap-3 p-4 rounded-lg border-2 transition-all hover:shadow-sm ${
-                        task.status === "done" ? "bg-green-50 border-green-200" : "bg-white border-gray-200"
-                      }`}
-                    >
-                      <button onClick={() => toggleTaskComplete(task)} className="mt-0.5">
-                        {task.status === "done" ? (
-                          <CheckCircle className="w-5 h-5 text-green-500" />
-                        ) : (
-                          <Circle className="w-5 h-5 text-gray-400 hover:text-green-400" />
-                        )}
-                      </button>
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className={`font-medium ${task.status === "done" ? "line-through text-gray-500" : "text-gray-900"}`}>
-                            {task.title}
-                          </h3>
-                          <span className={`px-2 py-1 text-xs rounded-full border ${getPriorityColor(task.priority)}`}>
-                            {getPriorityText(task.priority)}
-                          </span>
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            task.type === "work" ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"
-                          }`}>
-                            {task.type === "work" ? "Werk" : "Privé"}
-                          </span>
-                        </div>
-                        
-                        {task.notes && (
-                          <p className="text-sm text-gray-600 mb-2">{task.notes}</p>
-                        )}
-                        
-                        {task.projects && (
-                          <div className="text-xs text-gray-500">
-                            📁 {task.projects.name}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Upcoming Tasks */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-            <div className="p-6 border-b border-gray-100">
-              <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-orange-500" />
-                Aankomende Taken
-              </h2>
-            </div>
-            
-            <div className="p-6">
-              {upcomingTasks.length === 0 ? (
-                <p className="text-gray-600 text-center py-4">Geen taken met deadlines</p>
-              ) : (
-                <div className="space-y-3">
-                  {upcomingTasks.map(task => (
-                    <div key={task.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                      <div className="flex-1">
-                        <h3 className="font-medium text-gray-900">{task.title}</h3>
-                        {task.projects && (
-                          <p className="text-sm text-gray-600">📁 {task.projects.name}</p>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <div className={`text-sm font-medium ${
-                          task.due_date && isToday(task.due_date) ? "text-red-600" :
-                          task.due_date && isTomorrow(task.due_date) ? "text-orange-600" :
-                          "text-gray-600"
-                        }`}>
-                          {task.due_date && (
-                            isToday(task.due_date) ? "Vandaag" :
-                            isTomorrow(task.due_date) ? "Morgen" :
-                            formatDate(task.due_date)
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Sidebar */}
-        <div className="space-y-6">
-          {/* Today's Schedule */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-            <div className="p-6 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <CalendarIcon className="w-5 h-5 text-green-500" />
-                Agenda Vandaag
-              </h2>
-            </div>
-            
-            <div className="p-6">
-              {upcomingEvents.length === 0 ? (
-                <div className="text-center py-6">
-                  <CalendarIcon className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-600 text-sm mb-3">Geen afspraken vandaag</p>
-                  <button
-                    onClick={() => setShowCalendarAuth(true)}
-                    className="text-blue-600 hover:text-blue-800 text-sm"
-                  >
-                    Koppel Gmail agenda
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {upcomingEvents.map(event => (
-                    <div key={event.id} className="border-l-4 border-blue-500 pl-4 py-2">
-                      <div className="font-medium text-gray-900">{event.title}</div>
-                      <div className="text-sm text-gray-600">
-                        {formatTime(event.start_time)} - {formatTime(event.end_time)}
-                      </div>
-                      {event.location && (
-                        <div className="text-xs text-gray-500 flex items-center gap-1 mt-1">
-                          <MapPin className="w-3 h-3" />
-                          {event.location}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Health Summary */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl border border-blue-200 p-6">
-            <h2 className="text-lg font-semibold text-blue-900 mb-4 flex items-center gap-2">
-              <Activity className="w-5 h-5" />
-              Health Snapshot
-            </h2>
-            
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-blue-700">Energie Level:</span>
-                <div className="flex">
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <Star
-                      key={i}
-                      className={`w-4 h-4 ${i < (stats?.energyLevel || 0) ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
-                    />
-                  ))}
-                </div>
-              </div>
-              
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-blue-700">Stappen:</span>
-                <span className="font-medium text-blue-900">{stats?.stepsToday?.toLocaleString() || 0}</span>
-              </div>
-              
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-blue-700">Workouts:</span>
-                <span className="font-medium text-blue-900">{stats?.workoutsToday || 0}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Task Form Modal */}
-      {showTaskForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-semibold">Nieuwe Taak Aanmaken</h3>
-              <button onClick={() => setShowTaskForm(false)}>
-                <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Titel *</label>
-                <input
-                  type="text"
-                  value={taskForm.title}
-                  onChange={(e) => setTaskForm(f => ({...f, title: e.target.value}))}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Wat moet er gedaan worden?"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Notities</label>
-                <textarea
-                  value={taskForm.notes}
-                  onChange={(e) => setTaskForm(f => ({...f, notes: e.target.value}))}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent h-24 resize-none"
-                  placeholder="Aanvullende details..."
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-                  <select
-                    value={taskForm.type}
-                    onChange={(e) => setTaskForm(f => ({...f, type: e.target.value as "work" | "personal"}))}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="work">Werk</option>
-                    <option value="personal">Privé</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Prioriteit</label>
-                  <select
-                    value={taskForm.priority}
-                    onChange={(e) => setTaskForm(f => ({...f, priority: parseInt(e.target.value)}))}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value={3}>Laag</option>
-                    <option value={2}>Medium</option>
-                    <option value={1}>Hoog</option>
-                  </select>
-                </div>
