@@ -906,5 +906,25 @@ export default function Dashboard() {
                   disabled={connectCalendarMutation.isPending}
                   className="w-full bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 disabled:bg-gray-300 transition-colors flex items-center justify-center gap-2"
                 >
-                  <ExternalLink className="w-4 h-4" />
-                  {
+                 <ExternalLink className="w-4 h-4" />
+{connectCalendarMutation.isPending ? "Verbinden..." : "Verbind met Google"}
+</button>
+
+<button
+  onClick={() => setShowCalendarAuth(false)}
+  className="w-full border border-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-50 transition-colors"
+>
+  Annuleren
+</button>
+
+<p className="text-xs text-gray-500">
+  We openen een nieuw venster voor Google OAuth. Na het verbinden worden je afspraken automatisch
+  gesynchroniseerd.
+</p>
+</div>
+</div>
+</div>
+)}
+</div>
+);
+}
