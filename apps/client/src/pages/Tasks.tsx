@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Check, X, Edit, Trash2, Clock, CheckSquare, Square, Building, Calendar, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api';
+import { Calendar as CalendarIcon } from "lucide-react";
 
 type TaskStatus = "todo" | "in_progress" | "done" | "cancelled";
 type TaskType = "work" | "personal";
@@ -352,7 +353,7 @@ const Tasks = () => {
                       <div className="flex items-center space-x-4 text-xs text-gray-500">
                         {task.due_date && (
                           <span className="flex items-center space-x-1">
-                            <Calendar className="h-3 w-3" />
+                            <CalendarIcon className="h-3 w-3" />
                             <span>{new Date(task.due_date).toLocaleDateString('nl-NL')}</span>
                           </span>
                         )}

@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle, X } from "lucide-react";
+import { Calendar as CalendarIcon } from "lucide-react";
+
 
 type ImportResult = {
   success: boolean;
@@ -314,7 +316,7 @@ export default function Settings() {
                   {/* Google Calendar */}
                   <div className="border border-border rounded-lg p-4">
                     <div className="flex items-center gap-3 mb-3">
-                      <Calendar className="w-8 h-8 text-blue-600" />
+                      <CalendarIcon className="w-8 h-8 text-blue-600" />
                       <div>
                         <h5 className="font-medium text-card-foreground">Google Agenda</h5>
                         <p className="text-xs text-muted-foreground">Afspraken van laatste week</p>
@@ -325,7 +327,7 @@ export default function Settings() {
                       disabled={isImporting}
                       className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
                     >
-                      <Calendar className="w-4 h-4" />
+                     <CalendarIcon className="w-4 h-4" />
                       Importeer agenda
                     </button>
                   </div>
