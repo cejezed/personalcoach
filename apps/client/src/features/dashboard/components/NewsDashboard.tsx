@@ -84,7 +84,7 @@ const NewsDashboard: React.FC = () => {
       // Using NewsAPI - you'll need to get a free API key from https://newsapi.org
       const baseUrl = 'https://newsapi.org/v2/everything';
       const params = new URLSearchParams({
-        apiKey: NEWS_API_KEY || 'demo-key',
+  apiKey: NEWS_API_KEY || '',
         q: query,
         language: category === 'general' ? 'nl' : 'en',
         sortBy: 'publishedAt',

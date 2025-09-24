@@ -19,6 +19,6 @@ export function useTimeEntries(params: { days?: number; project_id?: string; fro
   const qs = q.toString();
   return useQuery<TimeEntry[]>({
     queryKey: ["time_entries", params],
-    queryFn: () => getJson<TimeEntry[]>(`/time_entries${qs ? `?${qs}` : ""}`),
+  queryFn: () => getJson<TimeEntry[]>(`/time-entries${qs ? `?${qs}` : ""}`),
   });
 }

@@ -19,7 +19,7 @@ function daysBackISO(n: number) {
 export default function TimeSummary({ days = 7 }: { days?: number }) {
   const { data, isLoading, isError } = useQuery<TimeEntry[]>({
     queryKey: ["time_entries", { days }],
-    queryFn: () => apiRequest(`/time_entries?days=${days}`),
+  queryFn: () => apiRequest(`/time-entries?days=${days}`),
   });
 
   const { totalHours, bars } = useMemo(() => {
