@@ -321,14 +321,13 @@ export default function Settings() {
                         <p className="text-xs text-muted-foreground">Afspraken van laatste week</p>
                       </div>
                     </div>
-                    <button
-                      onClick={handleCalendarImport}
-                      disabled={isImporting}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
-                    >
-                      <CalendarIcon className="w-4 h-4" />
-                      Importeer agenda
-                    </button>
+                  <button
+  onClick={() => alert('Google Calendar import komt binnenkort beschikbaar')}
+  className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+>
+  <Calendar className="w-4 h-4" />
+  Importeer agenda
+</button>
                   </div>
 
                   {/* ICS File */}
