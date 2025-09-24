@@ -551,7 +551,7 @@ export default function Time() {
                           </tr>
                         </thead>
                         <tbody>
-                          {Array.isArray(Object.values(s.phaseBreakdown)) &&
+                          {s.phaseBreakdown && typeof s.phaseBreakdown === 'object' &&
                             Object.values(s.phaseBreakdown)
                               .sort((a, b) => a.phase.sort_order - b.phase.sort_order)
                               .map((row) => (

@@ -104,12 +104,12 @@ const Tasks = () => {
     : [];
 
   // Statistics
-  const activeWorkTasks = tasks.filter((t: Task) => t.type === "work" && t.status !== "done").length;
-  const activePersonalTasks = tasks.filter((t: Task) => t.type === "personal" && t.status !== "done").length;
-  const inProgressTasks = tasks.filter((t: Task) => t.status === "in_progress").length;
-  const overdueTasks = tasks.filter((t: Task) =>
+  const activeWorkTasks = Array.isArray(tasks) ? tasks.filter((t: Task) => t.type === "work" && t.status !== "done").length : 0;
+  const activePersonalTasks = Array.isArray(tasks) ? tasks.filter((t: Task) => t.type === "personal" && t.status !== "done").length : 0;
+  const inProgressTasks = Array.isArray(tasks) ? tasks.filter((t: Task) => t.status === "in_progress").length : 0;
+  const overdueTasks = Array.isArray(tasks) ? tasks.filter((t: Task) =>
     t.due_date && new Date(t.due_date) < new Date() && t.status !== "done"
-  ).length;
+  ).length : 0;
 
   const handleCreateTask = () => {
     if (!formData.title.trim()) return;
