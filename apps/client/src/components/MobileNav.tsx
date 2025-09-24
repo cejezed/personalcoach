@@ -1,13 +1,12 @@
-// apps/client/src/components/MobileNav.tsx
 import { NavLink } from "react-router-dom";
-import { Home, Clock, CheckSquare, Heart, FileText } from "lucide-react";
+import { Home, Clock, CheckSquare, Heart, Lightbulb } from "lucide-react";
 
 const mobileNavigation = [
   { name: "Home", to: "/", icon: Home },
   { name: "Time", to: "/time", icon: Clock },
   { name: "Tasks", to: "/tasks", icon: CheckSquare },
+  { name: "Ideas", to: "/ideas", icon: Lightbulb },
   { name: "Health", to: "/health", icon: Heart },
-  { name: "Invoices", to: "/invoices", icon: FileText },
 ];
 
 export default function MobileNav() {

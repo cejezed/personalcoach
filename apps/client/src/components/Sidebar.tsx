@@ -1,4 +1,3 @@
-// apps/client/src/components/Sidebar.tsx
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Home,
@@ -11,7 +10,7 @@ import {
   Download,
   BarChart3,
   User,
-  Folder,
+  Lightbulb,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -19,7 +18,7 @@ const navigation = [
   { name: "Dashboard", to: "/", icon: Home },
   { name: "Time Tracking", to: "/time", icon: Clock },
   { name: "Tasks", to: "/tasks", icon: CheckSquare },
-  { name: "Projecten", to: "/projecten", icon: Folder },
+  { name: "Ideas", to: "/ideas", icon: Lightbulb },
   { name: "Budgets", to: "/budgets", icon: DollarSign },
   { name: "Invoices", to: "/invoices", icon: FileText },
   { name: "Health", to: "/health", icon: Heart },

@@ -1,8 +1,7 @@
 import React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Download, X } from "lucide-react";
+import { Plus, Download, X, Archive, ArchiveRestore, MoreHorizontal } from "lucide-react";
 import { api } from "@/lib/api";
-import ExcelImportTool from "@/components/ExcelImportTool";
 
 /* =======================
    Types
@@ -14,6 +13,9 @@ type Project = {
   client_name?: string;
   default_rate_cents?: number;
   created_at?: string;
+  archived?: boolean;            // ✅ toegevoegd
+  archived_at?: string | null;   // blijft
+  is_archived?: boolean;         // backward compat / computed
 };
 
 type Phase = {
@@ -52,6 +54,19 @@ const FALLBACK_PHASES: Phase[] = [
   { code: "uitvoering-tekeningen", name: "Uitvoering tekeningen", sort_order: 9 },
   { code: "oplevering-nazorg", name: "Oplevering/nazorg", sort_order: 10 },
 ];
+
+const phaseShortcodes: Record<string, string> = {
+  "schetsontwerp": "SO",
+  "voorlopig-ontwerp": "VO",
+  "vo-tekeningen": "VO-tek",
+  "definitief-ontwerp": "DO",
+  "do-tekeningen": "DO-tek",
+  "bouwvoorbereiding": "BV",
+  "bv-tekeningen": "BV-tek",
+  "uitvoering": "UTV",
+  "uitvoering-tekeningen": "UTV-tek",
+  "oplevering-nazorg": "OP",
+};
 
 /* =======================
    Helpers
@@ -116,7 +131,9 @@ export default function Time() {
   const [view, setView] = React.useState<"entries" | "summary">("entries");
   const [filterProject, setFilterProject] = React.useState<string>("");
   const [filterPeriod, setFilterPeriod] = React.useState<"all" | "week" | "month">("all");
+  const [showArchived, setShowArchived] = React.useState<boolean>(false);
   const [showProjectForm, setShowProjectForm] = React.useState(false);
+  const [activeDropdown, setActiveDropdown] = React.useState<string | null>(null);
 
   const [form, setForm] = React.useState<{
     project_id: string;
@@ -158,6 +175,14 @@ export default function Time() {
       "oplevering-nazorg": "",
     },
   });
+
+  // Filter projecten op basis van archief status
+const filteredProjects = React.useMemo(() => {
+  return projects.filter(project => {
+    const isArchived = !!(project.archived || project.archived_at !== null || project.is_archived);
+    return showArchived ? isArchived : !isArchived;
+  });
+}, [projects, showArchived]);
 
   const selectedProject = React.useMemo(
     () => projects.find((p) => p.id === form.project_id),
@@ -239,6 +264,23 @@ export default function Time() {
     },
   });
 
+  // Nieuw: Archive/Unarchive project mutation
+const toggleArchiveProject = useMutation({
+  mutationFn: async ({ projectId, archive }: { projectId: string; archive: boolean }) => {
+    return api<Project>(`/api/projects/${projectId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        archived: archive,                                 // ✅ nieuw
+        archived_at: archive ? new Date().toISOString() : null
+      }),
+    });
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["projects"] });
+    setActiveDropdown(null);
+  },
+});
+
   /* ---- Afgeleide data ---- */
   const filteredEntries = React.useMemo(() => {
     let rows = timeEntries.slice();
@@ -262,44 +304,70 @@ export default function Time() {
     return rows;
   }, [timeEntries, filterProject, filterPeriod]);
 
-  const projectSummary = React.useMemo(() => {
-    const map: Record<
-      string,
-      {
-        project: Project;
-        phases: Record<
-          string,
-          { hours: number; amount: number; phase?: Phase }
-        >;
-        totalHours: number;
-        totalAmount: number;
+  const enhancedProjectSummary = React.useMemo(() => {
+    // Start met gefilterde projecten (actief of gearchiveerd)
+    const summary = filteredProjects.map(project => {
+      const projectEntries = timeEntries.filter(entry => entry.project_id === project.id);
+      const totalHours = projectEntries.reduce((sum, entry) => {
+        return sum + (entry.minutes ? entry.minutes / 60 : entry.hours || 0);
+      }, 0);
+      
+      const rate = (project.default_rate_cents || 0) / 100;
+      const totalAmount = totalHours * rate;
+      
+      // Per fase breakdown - start met alle fases
+      const phaseBreakdown = phases.reduce((acc, phase) => {
+        const phaseEntries = projectEntries.filter(entry => entry.phase_code === phase.code);
+        const phaseHours = phaseEntries.reduce((sum, entry) => {
+          return sum + (entry.minutes ? entry.minutes / 60 : entry.hours || 0);
+        }, 0);
+        
+        acc[phase.code] = {
+          phase: phase,
+          hours: phaseHours,
+          amount: phaseHours * rate,
+          entryCount: phaseEntries.length,
+          lastEntry: phaseEntries.length > 0 ? 
+            phaseEntries.sort((a, b) => new Date(b.occurred_on).getTime() - new Date(a.occurred_on).getTime())[0] : null
+        };
+        return acc;
+      }, {} as Record<string, { phase: Phase; hours: number; amount: number; entryCount: number; lastEntry: any }>);
+
+      const isArchived = !!(project.archived || project.archived_at !== null || project.is_archived);
+
+      return {
+        project,
+        totalHours,
+        totalAmount,
+        phaseBreakdown,
+        hasEntries: projectEntries.length > 0,
+        isArchived,
+        lastActivity: projectEntries.length > 0 ? 
+          projectEntries.sort((a, b) => new Date(b.occurred_on).getTime() - new Date(a.occurred_on).getTime())[0].occurred_on : null
+      };
+    });
+
+    // Sorteer: bij actieve projecten - recente activiteit eerst, bij gearchiveerde - archiveringsdatum
+    return summary.sort((a, b) => {
+      if (showArchived) {
+        // Gearchiveerde projecten: sorteer op archiveringsdatum (nieuwst eerst)
+        const aArchived = new Date(a.project.archived_at || 0).getTime();
+        const bArchived = new Date(b.project.archived_at || 0).getTime();
+        return bArchived - aArchived;
+      } else {
+        // Actieve projecten: sorteer op activiteit
+        if (a.hasEntries && !b.hasEntries) return -1;
+        if (!a.hasEntries && b.hasEntries) return 1;
+        if (a.lastActivity && b.lastActivity) {
+          return new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime();
+        }
+        return a.project.name.localeCompare(b.project.name);
       }
-    > = {};
+    });
+  }, [filteredProjects, timeEntries, phases, showArchived]);
 
-    for (const entry of timeEntries) {
-      const prj = getProjectFromEntry(entry);
-      if (!prj) continue;
-
-      const key = entry.project_id;
-      if (!map[key]) {
-        map[key] = { project: prj, phases: {}, totalHours: 0, totalAmount: 0 };
-      }
-      const phaseKey = entry.phase_code;
-      if (!map[key].phases[phaseKey]) {
-        map[key].phases[phaseKey] = { hours: 0, amount: 0, phase: getPhaseFromEntry(entry) };
-      }
-
-      const hours = entry.minutes ? entry.minutes / 60 : entry.hours || 0;
-      const rate = (prj.default_rate_cents || 0) / 100;
-      const amount = hours * rate;
-
-      map[key].phases[phaseKey].hours += hours;
-      map[key].phases[phaseKey].amount += amount;
-      map[key].totalHours += hours;
-      map[key].totalAmount += amount;
-    }
-    return map;
-  }, [timeEntries]);
+  // State voor uitklapbare projecten
+  const [expandedProjects, setExpandedProjects] = React.useState<Set<string>>(new Set());
 
   /* ---- Export CSV ---- */
   const exportToCSV = React.useCallback(() => {
@@ -366,18 +434,23 @@ export default function Time() {
     });
   };
 
-  // Fase shortcodes voor compacte weergave
-  const phaseShortcodes: Record<string, string> = {
-    "schetsontwerp": "SO",
-    "voorlopig-ontwerp": "VO", 
-    "vo-tekeningen": "VO tek",
-    "definitief-ontwerp": "DO",
-    "do-tekeningen": "DO tek",
-    "bouwvoorbereiding": "BV",
-    "bv-tekeningen": "BV tek",
-    "uitvoering": "UT",
-    "uitvoering-tekeningen": "UT tek",
-    "oplevering-nazorg": "Oplev",
+  const toggleProjectExpansion = (projectId: string) => {
+    setExpandedProjects(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(projectId)) {
+        newSet.delete(projectId);
+      } else {
+        newSet.add(projectId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleArchiveToggle = (projectId: string, isCurrentlyArchived: boolean) => {
+    toggleArchiveProject.mutate({
+      projectId,
+      archive: !isCurrentlyArchived
+    });
   };
 
   /* ---- UI ---- */
@@ -398,10 +471,6 @@ export default function Time() {
           >
             Project overzicht
           </button>
-
-          {/* Excel import knop/modaal */}
-          <ExcelImportTool />
-
           <button
             onClick={exportToCSV}
             className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
@@ -423,8 +492,8 @@ export default function Time() {
         <>
           {/* Project toevoegen modal */}
           {showProjectForm && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold">Nieuw project toevoegen</h3>
                   <button
@@ -450,45 +519,594 @@ export default function Time() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Plaats
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Stad/plaats van het project"
-                      value={projectForm.city}
-                      onChange={(e) => setProjectForm((f) => ({ ...f, city: e.target.value }))}
-                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Plaats
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Stad/plaats"
+                        value={projectForm.city}
+                        onChange={(e) => setProjectForm((f) => ({ ...f, city: e.target.value }))}
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Opdrachtgever
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Naam opdrachtgever"
+                        value={projectForm.client_name}
+                        onChange={(e) => setProjectForm((f) => ({ ...f, client_name: e.target.value }))}
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                      />
+                    </div>
                   </div>
 
+                  {/* Facturatie type */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Opdrachtgever
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Facturatie methode
                     </label>
-                    <input
-                      type="text"
-                      placeholder="Naam van de opdrachtgever"
-                      value={projectForm.client_name}
-                      onChange={(e) => setProjectForm((f) => ({ ...f, client_name: e.target.value }))}
-                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-                    />
+                    <div className="flex gap-4">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="hourly"
+                          checked={projectForm.billing_type === "hourly"}
+                          onChange={(e) => setProjectForm((f) => ({ ...f, billing_type: e.target.value as "hourly" | "fixed" }))}
+                          className="mr-2"
+                        />
+                        Op uurbasis
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="fixed"
+                          checked={projectForm.billing_type === "fixed"}
+                          onChange={(e) => setProjectForm((f) => ({ ...f, billing_type: e.target.value as "hourly" | "fixed" }))}
+                          className="mr-2"
+                        />
+                        Vaste honoraria per fase
+                      </label>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Uurtarief (€)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="75.00"
-                      value={projectForm.default_rate_euros}
-                      onChange={(e) => setProjectForm((f) => ({ ...f, default_rate_euros: e.target.value }))}
-                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-                    />
+                  {/* Uurtarief (alleen bij hourly) */}
+                  {projectForm.billing_type === "hourly" && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Uurtarief (€)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="75.00"
+                        value={projectForm.default_rate_euros}
+                        onChange={(e) => setProjectForm((f) => ({ ...f, default_rate_euros: e.target.value }))}
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm max-w-32"
+                      />
+                    </div>
+                  )}
+
+                  {/* Fase */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Fase *</label>
+                <div className="relative">
+                  <select
+                    value={form.phase_code}
+                    onChange={(e) => setForm((f) => ({ ...f, phase_code: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+                    required
+                  >
+                    <option value="">— Selecteer fase —</option>
+                    {phases
+                      .slice()
+                      .sort((a, b) => a.sort_order - b.sort_order)
+                      .map((ph) => (
+                        <option key={ph.code} value={ph.code}>
+                          {ph.name}
+                        </option>
+                      ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                    </svg>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Datum *</label>
+                <input
+                  type="date"
+                  value={form.occurred_on}
+                  onChange={(e) => setForm((f) => ({ ...f, occurred_on: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Uren *</label>
+                <input
+                  type="number"
+                  step="0.25"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={form.hours}
+                  onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={() => addTimeEntry.mutate(form)}
+                  disabled={
+                    addTimeEntry.isPending ||
+                    !form.project_id ||
+                    !form.phase_code ||
+                    !form.occurred_on ||
+                    !form.hours
+                  }
+                  className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 disabled:from-gray-300 disabled:to-gray-400 text-white px-4 py-3 rounded-lg text-sm font-medium flex items-center justify-center gap-2 shadow-sm transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  Toevoegen
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Omschrijving (optioneel)</label>
+              <input
+                type="text"
+                placeholder="Beschrijving van werkzaamheden…"
+                value={form.notes}
+                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+              />
+            </div>
+
+            {selectedProject && form.hours && (
+              <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900 mb-1">Kostenoverzicht</h4>
+                    <div className="text-sm text-gray-700 space-y-1">
+                      <div><strong>Project:</strong> {selectedProject.name} {selectedProject.city ? `(${selectedProject.city})` : ""}</div>
+                      <div><strong>Uurtarief:</strong> {EUR((selectedProject.default_rate_cents || 0) / 100)}</div>
+                      <div><strong>Bedrag:</strong> <span className="text-green-600 font-semibold">{EUR((parseFloat(form.hours || "0") || 0) * ((selectedProject.default_rate_cents || 0) / 100))}</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Filters */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Filters</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Project</label>
+                <select
+                  value={filterProject}
+                  onChange={(e) => setFilterProject(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+                >
+                  <option value="">Alle projecten</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}{p.city ? ` (${p.city})` : ""}{(p.archived || p.archived_at || p.is_archived) ? " (gearchiveerd)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Periode</label>
+                <select
+                  value={filterPeriod}
+                  onChange={(e) => setFilterPeriod(e.target.value as typeof filterPeriod)}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+                >
+                  <option value="all">Alle periodes</option>
+                  <option value="week">Afgelopen week</option>
+                  <option value="month">Deze maand</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Lijst entries */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+            <div className="p-6 border-b border-gray-100">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Geregistreerde uren ({entriesLoading ? "…" : filteredEntries.length})
+              </h2>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Project</th>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Fase</th>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Datum</th>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Uren</th>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Bedrag</th>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Omschrijving</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {!entriesLoading && filteredEntries.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                        <div className="w-12 h-12 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                          <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        Geen uren gevonden voor de geselecteerde filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredEntries.map((e) => {
+                      const prj = getProjectFromEntry(e);
+                      const ph = getPhaseFromEntry(e);
+                      const hours = e.minutes ? e.minutes / 60 : e.hours || 0;
+                      const rate = (prj?.default_rate_cents || 0) / 100;
+                      return (
+                        <tr key={e.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="font-medium text-gray-900">{prj?.name || "Onbekend"}</div>
+                            <div className="text-sm text-gray-600">{prj?.city}</div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-900">{ph?.name || e.phase_code}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {new Date(e.occurred_on).toLocaleDateString("nl-NL")}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-mono text-gray-900">{hours.toFixed(2)}h</td>
+                          <td className="px-6 py-4 text-sm font-mono text-green-600 font-medium">{EUR(hours * rate)}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{e.notes || "—"}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {view === "summary" && (
+        <div className="space-y-6">
+          {/* Archive Toggle */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Project weergave</h3>
+                <p className="text-sm text-gray-600 mt-1">Schakel tussen actieve en gearchiveerde projecten</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={`text-sm ${!showArchived ? 'font-medium text-gray-900' : 'text-gray-500'}`}>
+                  Actieve projecten
+                </span>
+                <button
+                  onClick={() => setShowArchived(!showArchived)}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                    showArchived ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out ${
+                      showArchived ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+                <span className={`text-sm ${showArchived ? 'font-medium text-gray-900' : 'text-gray-500'}`}>
+                  Gearchiveerde projecten
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {enhancedProjectSummary.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                {showArchived ? (
+                  <Archive className="w-8 h-8 text-gray-400" />
+                ) : (
+                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                )}
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {showArchived ? "Geen gearchiveerde projecten" : "Nog geen projecten"}
+              </h3>
+              <p className="text-gray-600">
+                {showArchived 
+                  ? "Er zijn nog geen projecten gearchiveerd" 
+                  : "Maak je eerste project aan om te beginnen met urenregistratie"
+                }
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {enhancedProjectSummary.map((summary) => {
+                const isExpanded = expandedProjects.has(summary.project.id);
+                
+                return (
+                  <div key={summary.project.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+                    {/* Project Header */}
+                    <div className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div 
+                          className="flex-1 min-w-0 cursor-pointer"
+                          onClick={() => toggleProjectExpansion(summary.project.id)}
+                        >
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="text-lg font-semibold text-gray-900 truncate">{summary.project.name}</h3>
+                            
+                            {/* Status indicators */}
+                            <div className="flex items-center gap-2">
+                              {summary.isArchived ? (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                  <Archive className="w-3 h-3 mr-1" />
+                                  Gearchiveerd
+                                </span>
+                              ) : summary.hasEntries ? (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  <div className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1"></div>
+                                  Actief
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-600">
+                                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-1"></div>
+                                  Nieuw
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-6 text-sm text-gray-600">
+                            {summary.project.city && (
+                              <div className="flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                {summary.project.city}
+                              </div>
+                            )}
+                            {summary.project.client_name && (
+                              <div className="flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                {summary.project.client_name}
+                              </div>
+                            )}
+                            {summary.lastActivity && (
+                              <div className="flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Laatste activiteit: {new Date(summary.lastActivity).toLocaleDateString("nl-NL")}
+                              </div>
+                            )}
+                            {summary.isArchived && summary.project.archived_at && (
+                              <div className="flex items-center gap-1">
+                                <Archive className="w-4 h-4" />
+                                Gearchiveerd: {new Date(summary.project.archived_at).toLocaleDateString("nl-NL")}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-6">
+                          {/* Statistieken */}
+                          <div className="text-right">
+                            <div className="text-2xl font-bold text-gray-900">
+                              {summary.totalHours.toFixed(1)}<span className="text-sm font-normal text-gray-500">h</span>
+                            </div>
+                            <div className="text-sm text-gray-600">Totaal uren</div>
+                          </div>
+                          
+                          <div className="text-right">
+                            <div className="text-2xl font-bold text-green-600">{EUR(summary.totalAmount)}</div>
+                            <div className="text-sm text-gray-600">Totaal bedrag</div>
+                          </div>
+
+                          {/* Action Menu */}
+                          <div className="relative ml-4">
+                            <button
+                              onClick={() => setActiveDropdown(activeDropdown === summary.project.id ? null : summary.project.id)}
+                              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                              <MoreHorizontal className="w-5 h-5" />
+                            </button>
+
+                            {activeDropdown === summary.project.id && (
+                              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                                <button
+                                  onClick={() => handleArchiveToggle(summary.project.id, summary.isArchived)}
+                                  disabled={toggleArchiveProject.isPending}
+                                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                >
+                                  {summary.isArchived ? (
+                                    <>
+                                      <ArchiveRestore className="mr-3 h-4 w-4" />
+                                      Project herstellen
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Archive className="mr-3 h-4 w-4" />
+                                      Project archiveren
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Expand/Collapse indicator */}
+                          <div 
+                            className="ml-2 cursor-pointer"
+                            onClick={() => toggleProjectExpansion(summary.project.id)}
+                          >
+                            <svg 
+                              className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
+                              fill="none" 
+                              stroke="currentColor" 
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expanded Project Details */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-100 bg-gray-50">
+                        <div className="p-6">
+                          <div className="mb-4">
+                            <h4 className="text-sm font-medium text-gray-900 mb-3">Projectfases</h4>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {Object.entries(summary.phaseBreakdown)
+                              .sort(([,a], [,b]) => a.phase.sort_order - b.phase.sort_order)
+                              .map(([phaseCode, phaseData]) => {
+                                const isActive = phaseData.hours > 0;
+                                
+                                return (
+                                  <div 
+                                    key={phaseCode} 
+                                    className={`p-4 rounded-lg border-2 transition-all ${
+                                      isActive 
+                                        ? 'bg-white border-blue-200 shadow-sm' 
+                                        : 'bg-gray-50 border-gray-200 hover:border-gray-300'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between mb-2">
+                                      <h5 className={`font-medium text-sm ${isActive ? 'text-gray-900' : 'text-gray-600'}`}>
+                                        {phaseData.phase.name}
+                                      </h5>
+                                      {isActive && (
+                                        <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="space-y-1">
+                                      <div className={`text-lg font-bold ${isActive ? 'text-blue-600' : 'text-gray-400'}`}>
+                                        {phaseData.hours > 0 ? `${phaseData.hours.toFixed(1)}h` : '0h'}
+                                      </div>
+                                      
+                                      {isActive && (
+                                        <div className="text-sm text-gray-600">
+                                          {EUR(phaseData.amount)} • {phaseData.entryCount} entries
+                                        </div>
+                                      )}
+                                      
+                                      {!isActive && (
+                                        <div className="text-xs text-gray-500">Nog geen uren</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Click outside handler for dropdowns */}
+      {activeDropdown && (
+        <div 
+          className="fixed inset-0 z-30" 
+          onClick={() => setActiveDropdown(null)}
+        />
+      )}
+    </div>
+  );
+} honoraria (alleen bij fixed) */}
+                  {projectForm.billing_type === "fixed" && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Afgesproken honorarium per fase (€)
+                      </label>
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <div className="grid grid-cols-2 gap-3">
+                          {phases
+                            .slice()
+                            .sort((a, b) => a.sort_order - b.sort_order)
+                            .map((phase) => (
+                              <div key={phase.code} className="flex items-center gap-2">
+                                <span className="text-sm font-medium w-20 shrink-0">
+                                  {phaseShortcodes[phase.code] || phase.code}:
+                                </span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="0"
+                                  value={projectForm.phase_budgets[phase.code] || ""}
+                                  onChange={(e) => 
+                                    setProjectForm((f) => ({
+                                      ...f,
+                                      phase_budgets: {
+                                        ...f.phase_budgets,
+                                        [phase.code]: e.target.value
+                                      }
+                                    }))
+                                  }
+                                  className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                                />
+                              </div>
+                            ))}
+                        </div>
+                        <div className="mt-2 text-xs text-gray-600">
+                          Vul alleen de fases in waarvoor een vast bedrag is afgesproken. Lege velden worden overgeslagen.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Totaaloverzicht bij fixed */}
+                  {projectForm.billing_type === "fixed" && (
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <div className="text-sm text-blue-800">
+                        <span className="font-medium">Totaal project honorarium: </span>
+                        {EUR(
+                          Object.values(projectForm.phase_budgets)
+                            .filter(amount => amount && parseFloat(amount) > 0)
+                            .reduce((sum, amount) => sum + parseFloat(amount), 0)
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2 mt-6">
@@ -512,261 +1130,46 @@ export default function Time() {
           )}
 
           {/* Invoerformulier */}
-          <div className="bg-white rounded-lg shadow-sm border p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold">Uren registreren</h2>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Uren registreren</h2>
+                <p className="text-sm text-gray-600 mt-1">Voeg nieuwe uren toe aan je projecten</p>
+              </div>
               <button
                 onClick={() => setShowProjectForm(true)}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm flex items-center gap-2"
+                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-all"
               >
                 <Plus className="w-4 h-4" />
                 Project toevoegen
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               {/* Project */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Project *</label>
-                <select
-                  value={form.project_id}
-                  onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm bg-white h-40"
-                  size={10}
-                  required
-                >
-                  <option value="">— Selecteer project —</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}{p.city ? ` (${p.city})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Fase */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Fase *</label>
-                <select
-                  value={form.phase_code}
-                  onChange={(e) => setForm((f) => ({ ...f, phase_code: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm bg-white min-h-[200px]"
-                  size={10}
-                  required
-                >
-                  <option value="">— Selecteer fase —</option>
-                  {phases
-                    .slice()
-                    .sort((a, b) => a.sort_order - b.sort_order)
-                    .map((ph) => (
-                      <option key={ph.code} value={ph.code}>
-                        {ph.name}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Project *</label>
+                <div className="relative">
+                  <select
+                    value={form.project_id}
+                    onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+                    required
+                  >
+                    <option value="">— Selecteer project —</option>
+                    {/* Alleen actieve projecten tonen in het formulier */}
+                    {projects.filter(p => !p.archived && !p.archived_at && !p.is_archived).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}{p.city ? ` (${p.city})` : ""}
                       </option>
                     ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Datum *</label>
-                <input
-                  type="date"
-                  value={form.occurred_on}
-                  onChange={(e) => setForm((f) => ({ ...f, occurred_on: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Uren *</label>
-                <input
-                  type="number"
-                  step="0.25"
-                  inputMode="decimal"
-                  placeholder="0"
-                  value={form.hours}
-                  onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                />
-              </div>
-              <div className="flex items-end">
-                <button
-                  onClick={() => addTimeEntry.mutate(form)}
-                  disabled={
-                    addTimeEntry.isPending ||
-                    !form.project_id ||
-                    !form.phase_code ||
-                    !form.occurred_on ||
-                    !form.hours
-                  }
-                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-3 py-2 rounded text-sm font-medium flex items-center justify-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Toevoegen
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Omschrijving (optioneel)</label>
-              <input
-                type="text"
-                placeholder="Beschrijving van werkzaamheden…"
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-              />
-            </div>
-
-            {selectedProject && form.hours && (
-              <div className="text-sm text-gray-700 mt-3 p-2 bg-blue-50 rounded">
-                <span className="font-medium">Project:</span> {selectedProject.name}{" "}
-                {selectedProject.city ? `(${selectedProject.city})` : ""} •{" "}
-                <span className="font-medium">Uurtarief:</span>{" "}
-                {EUR((selectedProject.default_rate_cents || 0) / 100)} •{" "}
-                <span className="font-medium">Bedrag:</span>{" "}
-                {EUR((parseFloat(form.hours || "0") || 0) * ((selectedProject.default_rate_cents || 0) / 100))}
-              </div>
-            )}
-          </div>
-
-          {/* Filters */}
-          <div className="bg-white rounded-lg shadow-sm border p-4">
-            <h3 className="text-lg font-semibold mb-4">Filters</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <select
-                value={filterProject}
-                onChange={(e) => setFilterProject(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-2"
-              >
-                <option value="">Alle projecten</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}{p.city ? ` (${p.city})` : ""}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={filterPeriod}
-                onChange={(e) => setFilterPeriod(e.target.value as typeof filterPeriod)}
-                className="border border-gray-300 rounded-md px-3 py-2"
-              >
-                <option value="all">Alle periodes</option>
-                <option value="week">Afgelopen week</option>
-                <option value="month">Deze maand</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Lijst entries */}
-          <div className="bg-white rounded-lg shadow-sm border">
-            <div className="p-4 border-b">
-              <h2 className="text-lg font-semibold">
-                Geregistreerde uren ({entriesLoading ? "…" : filteredEntries.length})
-              </h2>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Project</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Fase</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Datum</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Uren</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Bedrag</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Omschrijving</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {!entriesLoading && filteredEntries.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                        Geen uren gevonden voor de geselecteerde filters.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredEntries.map((e) => {
-                      const prj = getProjectFromEntry(e);
-                      const ph = getPhaseFromEntry(e);
-                      const hours = e.minutes ? e.minutes / 60 : e.hours || 0;
-                      const rate = (prj?.default_rate_cents || 0) / 100;
-                      return (
-                        <tr key={e.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3">
-                            <div className="font-medium">{prj?.name || "Onbekend"}</div>
-                            <div className="text-sm text-gray-600">{prj?.city}</div>
-                          </td>
-                          <td className="px-4 py-3 text-sm">{ph?.name || e.phase_code}</td>
-                          <td className="px-4 py-3 text-sm">
-                            {new Date(e.occurred_on).toLocaleDateString("nl-NL")}
-                          </td>
-                          <td className="px-4 py-3 text-sm font-mono">{hours.toFixed(2)}h</td>
-                          <td className="px-4 py-3 text-sm font-mono">{EUR(hours * rate)}</td>
-                          <td className="px-4 py-3 text-sm">{e.notes || "—"}</td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
-
-      {view === "summary" && (
-        <div className="space-y-6">
-          {Object.values(projectSummary).length === 0 ? (
-            <div className="text-center py-8 text-gray-500">Nog geen geregistreerde uren.</div>
-          ) : (
-            Object.values(projectSummary).map((s) => (
-              <div key={s.project.id} className="bg-white rounded-lg shadow-sm border">
-                <div className="p-4 border-b bg-gray-50">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-lg font-semibold">{s.project.name}</h3>
-                      <p className="text-sm text-gray-600">
-                        {s.project.city} {s.project.client_name ? `— ${s.project.client_name}` : ""}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-700">
-                        Totaal uren: <span className="font-semibold">{s.totalHours.toFixed(1)}h</span>
-                      </div>
-                      <div className="text-sm text-green-700">
-                        Totaal bedrag: {EUR(s.totalAmount)}
-                      </div>
-                    </div>
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                    </svg>
                   </div>
                 </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Fase</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Uren</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Bedrag</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {Object.entries(s.phases).map(([code, data]) => (
-                        <tr key={code}>
-                          <td className="px-4 py-3 text-sm font-medium">{data.phase?.name || code}</td>
-                          <td className="px-4 py-3 text-sm">{data.hours.toFixed(1)}h</td>
-                          <td className="px-4 py-3 text-sm">{EUR(data.amount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
               </div>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+
+              {/* Fase
