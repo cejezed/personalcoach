@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Download,
   Upload,
@@ -27,13 +27,9 @@ type CalendarEvent = {
 
 /* -------------------- ICS helpers -------------------- */
 function parseICalDate(v: string): Date {
-  // Ondersteunt o.a. 20250101T090000Z en 20250101T090000
-  // Eventueel met ;TZID=Europe/Amsterdam:20250101T090000
   const tzSplit = v.split(":");
   const val = tzSplit.length > 1 ? tzSplit[1] : tzSplit[0];
-  // Strip evt. ;VALUE=DATE:
   const clean = val.replace(/;VALUE=DATE/g, "");
-  // Z = UTC, anders behandelen als local
   if (clean.endsWith("Z")) {
     const iso =
       clean.slice(0, 4) +
@@ -65,13 +61,11 @@ function parseICalDate(v: string): Date {
       clean.slice(13, 15);
     return new Date(iso);
   }
-  // DATE-only (hele dag)
   if (/^\d{8}$/.test(clean)) {
     const iso =
       clean.slice(0, 4) + "-" + clean.slice(4, 6) + "-" + clean.slice(6, 8);
     return new Date(iso + "T00:00:00");
   }
-  // fallback
   return new Date(clean);
 }
 
@@ -133,6 +127,9 @@ export default function Settings() {
   // Calendar import UI state
   const [showCalendarPreview, setShowCalendarPreview] = useState(false);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+
+  // <-- nieuw: ref voor .ics input
+  const icsInputRef = useRef<HTMLInputElement>(null);
 
   /* ---------- Data loaders ---------- */
   const loadProjects = async () => {
@@ -246,7 +243,6 @@ export default function Settings() {
 
       const XLSX = (window as any).XLSX;
       if (!XLSX) {
-        // Fallback naar CSV
         await exportTimeCSV();
         return;
       }
@@ -381,6 +377,11 @@ export default function Settings() {
   };
 
   /* ---------- ICS import ---------- */
+  function handleCalendarImport() {
+    // open verborgen .ics file input
+    icsInputRef.current?.click();
+  }
+
   async function handleICSImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -406,7 +407,6 @@ export default function Settings() {
         errors: [String(err)],
       });
     } finally {
-      // reset file input
       e.target.value = "";
     }
   }
@@ -536,7 +536,7 @@ export default function Settings() {
                   Agenda import
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Google Calendar (placeholder) */}
+                  {/* Google Calendar knop opent .ics input */}
                   <div className="border border-border rounded-lg p-4">
                     <div className="flex items-center gap-3 mb-3">
                       <CalendarIcon className="w-8 h-8 text-blue-600" />
@@ -545,14 +545,12 @@ export default function Settings() {
                           Google Agenda
                         </h5>
                         <p className="text-xs text-muted-foreground">
-                          Afspraken van laatste week
+                          Afspraken via .ics export
                         </p>
                       </div>
                     </div>
                     <button
-                      onClick={() =>
-                        alert("Google Calendar import komt binnenkort beschikbaar")
-                      }
+                      onClick={handleCalendarImport}
                       className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
                     >
                       <CalendarIcon className="w-4 h-4" />
@@ -580,6 +578,7 @@ export default function Settings() {
                         type="file"
                         accept=".ics"
                         onChange={handleICSImport}
+                        ref={icsInputRef}   // <-- nieuw
                         className="hidden"
                       />
                     </label>
