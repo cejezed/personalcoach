@@ -2,6 +2,7 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Link } from "react-router-dom";
+import { Calendar as CalendarIcon, Folder } from "lucide-react"; // ✅
 
 type Project = {
   id: string;

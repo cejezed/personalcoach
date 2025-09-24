@@ -5,6 +5,7 @@ import TimeSummary from "./components/TimeSummary";
 import ProjectTable from "./components/ProjectTable";
 import NewsDashboard from "./components/NewsDashboard";
 import { Clock, CheckSquare, FolderKanban } from "lucide-react";
+import KPICard from "./components/KPICard";
 
 // ... KPICard component blijft hetzelfde ...
 

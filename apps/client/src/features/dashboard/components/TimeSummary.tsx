@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { Calendar as CalendarIcon, Clock } from "lucide-react"; // ✅
 
 type TimeEntry = {
   id: string;
