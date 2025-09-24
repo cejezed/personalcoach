@@ -92,14 +92,16 @@ const Tasks = () => {
   });
 
   // Filter tasks
-  const filteredTasks = tasks.filter((task: Task) => {
-    if (typeFilter === "work" && task.type !== "work") return false;
-    if (typeFilter === "personal" && task.type !== "personal") return false;
-    if (selectedProjectFilter && task.project_id !== selectedProjectFilter) return false;
-    if (filter === "active") return task.status !== "done";
-    if (filter === "completed") return task.status === "done";
-    return true;
-  });
+  const filteredTasks = Array.isArray(tasks)
+    ? tasks.filter((task: Task) => {
+        if (typeFilter === "work" && task.type !== "work") return false;
+        if (typeFilter === "personal" && task.type !== "personal") return false;
+        if (selectedProjectFilter && task.project_id !== selectedProjectFilter) return false;
+        if (filter === "active") return task.status !== "done";
+        if (filter === "completed") return task.status === "done";
+        return true;
+      })
+    : [];
 
   // Statistics
   const activeWorkTasks = tasks.filter((t: Task) => t.type === "work" && t.status !== "done").length;

@@ -1,11 +1,16 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
+  Lightbulb,
   Home,
   FolderKanban,
   CheckSquare,
   Calendar,
   Settings,
+  Timer,
+  Wallet,
+  HeartPulse,
+  Bot,
 } from "lucide-react";
 
 type NavItem = {
@@ -17,9 +22,14 @@ type NavItem = {
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/", icon: <Home className="w-5 h-5" /> },
   { label: "Projecten", href: "/projects", icon: <FolderKanban className="w-5 h-5" /> },
+    { label: "Uren", href: "/time", icon: <Timer className="w-5 h-5" /> },
+      { label: "Budgetten", href: "/budgets", icon: <Wallet className="w-5 h-5" /> },
   { label: "Taken", href: "/tasks", icon: <CheckSquare className="w-5 h-5" /> },
+  { label: "Ideas", href: "/ideas", icon: <Lightbulb className="w-5 h-5" /> },
+     { label: "Gezondheid", href: "/health", icon: <HeartPulse className="w-5 h-5" /> },
   { label: "Agenda", href: "/calendar", icon: <Calendar className="w-5 h-5" /> },
-  { label: "Instellingen", href: "/settings", icon: <Settings className="w-5 h-5" /> },
+    { label: "Coach", href: "/coach", icon: <Bot className="w-5 h-5" /> },
+   { label: "Instellingen", href: "/settings", icon: <Settings className="w-5 h-5" /> },
 ];
 
 export default function Sidebar() {

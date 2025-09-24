@@ -37,7 +37,7 @@ export default function ProjectTable({ limit = 5 }: { limit?: number }) {
           <div className="text-sm text-slate-500">Nog geen projecten.</div>
         )}
 
-        {!isLoading && !isError && data && (
+        {!isLoading && !isError && Array.isArray(data) && (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
@@ -67,6 +67,9 @@ export default function ProjectTable({ limit = 5 }: { limit?: number }) {
               </tbody>
             </table>
           </div>
+        )}
+        {!isLoading && !isError && data && !Array.isArray(data) && (
+          <div className="text-sm text-red-600">Ongeldige data ontvangen van de server.</div>
         )}
       </div>
     </section>

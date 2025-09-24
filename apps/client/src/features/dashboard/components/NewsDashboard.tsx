@@ -58,7 +58,7 @@ const NewsDashboard: React.FC = () => {
   ];
 
   // API configuration
-  const NEWS_API_KEY = process.env.NEXT_PUBLIC_NEWS_API_KEY;
+  const NEWS_API_KEY = import.meta.env.VITE_NEWS_API_KEY;
   
   const fetchNews = async (category: NewsTab): Promise<NewsItem[]> => {
     setLoading(prev => ({ ...prev, [category]: true }));
@@ -99,9 +99,13 @@ const NewsDashboard: React.FC = () => {
       }
       
       const data = await response.json();
-      
+
       if (data.status !== 'ok') {
         throw new Error(data.message || 'API error');
+      }
+
+      if (!Array.isArray(data.articles)) {
+        throw new Error('Nieuwsdata is ongeldig of niet beschikbaar.');
       }
 
       const articles: NewsItem[] = data.articles.map((article: any, index: number) => ({
