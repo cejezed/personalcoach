@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Edit, TrendingUp, Clock, DollarSign, AlertTriangle, CheckCircle } from "lucide-react";
+import { Plus, Edit, TrendingUp, Clock, DollarSign, AlertTriangle, CheckCircle, X } from "lucide-react";
 import { api } from "@/lib/api";
 
 /* =======================
@@ -15,6 +15,7 @@ type Project = {
   billing_type?: "hourly" | "fixed";
   phase_budgets?: Record<string, number>;
   created_at?: string;
+  archived?: boolean;
 };
 
 type TimeEntry = {
@@ -78,7 +79,7 @@ const getStatusColor = (status: BudgetStatus) => {
   switch (status) {
     case "under_budget": return "text-green-600 bg-green-50 border-green-200";
     case "on_track": return "text-blue-600 bg-blue-50 border-blue-200";
-    case "over_budget": return "text-orange-600 bg-orange-50 border-orange-200";
+    case "over_budget": return "text-amber-600 bg-amber-50 border-amber-200";
     case "budget_exceeded": return "text-red-600 bg-red-50 border-red-200";
   }
 };
@@ -87,7 +88,7 @@ const getStatusIcon = (status: BudgetStatus) => {
   switch (status) {
     case "under_budget": return <CheckCircle className="w-4 h-4 text-green-600" />;
     case "on_track": return <TrendingUp className="w-4 h-4 text-blue-600" />;
-    case "over_budget": return <AlertTriangle className="w-4 h-4 text-orange-600" />;
+    case "over_budget": return <AlertTriangle className="w-4 h-4 text-amber-600" />;
     case "budget_exceeded": return <AlertTriangle className="w-4 h-4 text-red-600" />;
   }
 };
@@ -129,9 +130,9 @@ export default function Budgets() {
   const phases: Phase[] = phasesData?.length ? phasesData : FALLBACK_PHASES;
 
   /* ---- State ---- */
-  const [editingProject, setEditingProject] = React.useState<Project | null>(null);
-  const [showEditModal, setShowEditModal] = React.useState(false);
-  const [editForm, setEditForm] = React.useState<{
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState<{
     billing_type: "hourly" | "fixed";
     default_rate_euros: string;
     phase_budgets: Record<string, string>;
@@ -163,7 +164,10 @@ export default function Budgets() {
 
   /* ---- Budget berekeningen ---- */
   const projectBudgets = React.useMemo(() => {
-    return projects.map(project => {
+    // Filter alleen actieve projecten
+    const activeProjects = projects.filter(p => !p.archived);
+    
+    return activeProjects.map(project => {
       const projectEntries = timeEntries.filter(entry => entry.project_id === project.id);
       const totalSpentHours = projectEntries.reduce((sum, entry) => {
         return sum + (entry.minutes ? entry.minutes / 60 : entry.hours || 0);
@@ -254,12 +258,19 @@ export default function Budgets() {
     updateProjectMutation.mutate(payload);
   };
 
-  /* ---- UI ---- */
+  /* ---- Loading state ---- */
   if (projectsLoading) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Budget Management</h1>
-        <div className="text-center py-8">Budgetten laden...</div>
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-muted rounded w-1/3"></div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-24 bg-muted rounded-xl"></div>
+            ))}
+          </div>
+          <div className="h-96 bg-muted rounded-xl"></div>
+        </div>
       </div>
     );
   }
@@ -269,123 +280,137 @@ export default function Budgets() {
   const totalHours = projectBudgets.reduce((sum, pb) => sum + pb.totalHours, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Budget Management</h1>
-          <p className="text-gray-600 mt-1">Overzicht van project budgetten en gerealiseerde uren</p>
+          <h1 className="text-3xl font-bold text-foreground">Budget Management</h1>
+          <p className="text-muted-foreground mt-2">Overzicht van project budgetten en gerealiseerde uren</p>
         </div>
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow-sm border p-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-card rounded-2xl border p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Totaal Budget</p>
-              <p className="text-2xl font-bold text-blue-600">{EUR(totalProjectValue)}</p>
+              <p className="text-sm font-medium text-muted-foreground">Totaal Budget</p>
+              <p className="text-2xl font-bold text-primary">{EUR(totalProjectValue)}</p>
             </div>
-            <DollarSign className="w-8 h-8 text-blue-500" />
+            <div className="p-3 bg-primary/10 rounded-xl">
+              <DollarSign className="w-6 h-6 text-primary" />
+            </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border p-4">
+        <div className="bg-card rounded-2xl border p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Gerealiseerd</p>
+              <p className="text-sm font-medium text-muted-foreground">Gerealiseerd</p>
               <p className="text-2xl font-bold text-green-600">{EUR(totalSpent)}</p>
             </div>
-            <TrendingUp className="w-8 h-8 text-green-500" />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Totaal Uren</p>
-              <p className="text-2xl font-bold text-purple-600">{totalHours.toFixed(1)}h</p>
+            <div className="p-3 bg-green-100 rounded-xl">
+              <TrendingUp className="w-6 h-6 text-green-600" />
             </div>
-            <Clock className="w-8 h-8 text-purple-500" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border p-4">
+        <div className="bg-card rounded-2xl border p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Gemiddeld Tarief</p>
-              <p className="text-2xl font-bold text-orange-600">
+              <p className="text-sm font-medium text-muted-foreground">Totaal Uren</p>
+              <p className="text-2xl font-bold text-blue-600">{totalHours.toFixed(1)}h</p>
+            </div>
+            <div className="p-3 bg-blue-100 rounded-xl">
+              <Clock className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-card rounded-2xl border p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Gemiddeld Tarief</p>
+              <p className="text-2xl font-bold text-purple-600">
                 {totalHours > 0 ? EUR(totalSpent / totalHours) : EUR(0)}/u
               </p>
             </div>
-            <DollarSign className="w-8 h-8 text-orange-500" />
+            <div className="p-3 bg-purple-100 rounded-xl">
+              <DollarSign className="w-6 h-6 text-purple-600" />
+            </div>
           </div>
         </div>
       </div>
 
       {/* Project budget lijst */}
-      <div className="bg-white rounded-lg shadow-sm border">
-        <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold">Project Budgetten</h2>
+      <div className="bg-card rounded-2xl border">
+        <div className="p-6 border-b border-border">
+          <h2 className="text-xl font-semibold text-card-foreground">Project Budgetten</h2>
         </div>
 
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-border">
           {projectBudgets.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              Nog geen projecten aangemaakt
+            <div className="text-center py-12">
+              <div className="w-16 h-16 mx-auto mb-4 bg-muted rounded-full flex items-center justify-center">
+                <DollarSign className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium text-card-foreground mb-2">Nog geen projecten</h3>
+              <p className="text-muted-foreground">Maak je eerste project aan om budgetbeheer te starten</p>
             </div>
           ) : (
             projectBudgets.map(({ project, totalBudget, totalSpent, totalHours, status, phaseBreakdown, isHourlyProject }) => (
-              <div key={project.id} className="p-4">
-                <div className="flex items-start justify-between mb-4">
+              <div key={project.id} className="p-6">
+                <div className="flex items-start justify-between mb-6">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-semibold text-lg">{project.name}</h3>
-                      <span className={`px-2 py-1 text-xs rounded-full border ${getStatusColor(status)}`}>
+                      <h3 className="font-semibold text-xl text-card-foreground">{project.name}</h3>
+                      <span className={`px-3 py-1 text-xs rounded-full border font-medium ${getStatusColor(status)}`}>
                         {getStatusIcon(status)}
                         <span className="ml-1">{getStatusText(status)}</span>
                       </span>
-                      <span className={`px-2 py-1 text-xs rounded-full ${isHourlyProject ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"}`}>
+                      <span className={`px-3 py-1 text-xs rounded-full font-medium ${
+                        isHourlyProject ? "bg-blue-100 text-blue-800 border border-blue-200" : "bg-purple-100 text-purple-800 border border-purple-200"
+                      }`}>
                         {isHourlyProject ? "Uurbasis" : "Vast honorarium"}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-muted-foreground">
                       {project.city} {project.client_name ? `— ${project.client_name}` : ""}
                     </p>
                   </div>
                   
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-6">
                     <div className="text-right">
-                      <div className="text-sm text-gray-600">
+                      <div className="text-sm text-muted-foreground mb-1">
                         {isHourlyProject ? "Gerealiseerd" : "Budget vs Gerealiseerd"}
                       </div>
-                      <div className="font-semibold">
+                      <div className="font-bold text-card-foreground">
                         {isHourlyProject ? EUR(totalSpent) : `${EUR(totalBudget)} / ${EUR(totalSpent)}`}
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-sm text-muted-foreground">
                         {totalHours.toFixed(1)} uren
                       </div>
                     </div>
                     <button
                       onClick={() => openEditModal(project)}
-                      className="text-blue-600 hover:text-blue-800"
+                      className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
                     >
-                      <Edit className="w-4 h-4" />
+                      <Edit className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
 
                 {/* Budget progress bar (alleen voor fixed price) */}
                 {!isHourlyProject && totalBudget > 0 && (
-                  <div className="mb-4">
-                    <div className="flex justify-between text-sm text-gray-600 mb-1">
+                  <div className="mb-6">
+                    <div className="flex justify-between text-sm text-muted-foreground mb-2">
                       <span>Voortgang</span>
                       <span>{Math.round((totalSpent / totalBudget) * 100)}%</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="w-full bg-secondary rounded-full h-3">
                       <div
-                        className={`h-2 rounded-full ${
+                        className={`h-3 rounded-full transition-all ${
                           status === "budget_exceeded" ? "bg-red-500" :
-                          status === "over_budget" ? "bg-orange-500" :
+                          status === "over_budget" ? "bg-amber-500" :
                           status === "on_track" ? "bg-blue-500" :
                           "bg-green-500"
                         }`}
@@ -402,22 +427,22 @@ export default function Budgets() {
                       const phase = phases.find(p => p.code === phaseCode);
                       const phaseStatus = getBudgetStatus(data.spent, data.budget);
                       return (
-                        <div key={phaseCode} className="bg-gray-50 rounded p-3">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-sm font-medium">{phase?.name || phaseCode}</span>
+                        <div key={phaseCode} className="bg-secondary/50 rounded-lg p-4">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium text-card-foreground">{phase?.name || phaseCode}</span>
                             {!isHourlyProject && data.budget > 0 && (
-                              <span className={`px-1 py-0.5 text-xs rounded ${getStatusColor(phaseStatus)}`}>
+                              <span className={`px-2 py-1 text-xs rounded-full font-medium ${getStatusColor(phaseStatus)}`}>
                                 {Math.round((data.spent / data.budget) * 100)}%
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-gray-600">
+                          <div className="text-sm font-semibold text-card-foreground mb-1">
                             {!isHourlyProject && data.budget > 0 ? 
                               `${EUR(data.budget)} / ${EUR(data.spent)}` : 
                               EUR(data.spent)
                             }
                           </div>
-                          <div className="text-xs text-gray-500">{data.hours.toFixed(1)} uren</div>
+                          <div className="text-xs text-muted-foreground">{data.hours.toFixed(1)} uren</div>
                         </div>
                       );
                     })}
@@ -431,44 +456,44 @@ export default function Budgets() {
 
       {/* Edit Modal */}
       {showEditModal && editingProject && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Budget bewerken: {editingProject.name}</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-semibold text-card-foreground">Budget bewerken: {editingProject.name}</h3>
               <button
                 onClick={() => setShowEditModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="p-2 hover:bg-secondary rounded-lg transition-colors"
               >
-                ×
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
               {/* Billing type */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-card-foreground mb-3">
                   Facturatie methode
                 </label>
                 <div className="flex gap-4">
-                  <label className="flex items-center">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
                       value="hourly"
                       checked={editForm.billing_type === "hourly"}
                       onChange={(e) => setEditForm(f => ({ ...f, billing_type: e.target.value as "hourly" | "fixed" }))}
-                      className="mr-2"
+                      className="text-primary"
                     />
-                    Op uurbasis
+                    <span className="text-card-foreground">Op uurbasis</span>
                   </label>
-                  <label className="flex items-center">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
                       value="fixed"
                       checked={editForm.billing_type === "fixed"}
                       onChange={(e) => setEditForm(f => ({ ...f, billing_type: e.target.value as "hourly" | "fixed" }))}
-                      className="mr-2"
+                      className="text-primary"
                     />
-                    Vaste honoraria per fase
+                    <span className="text-card-foreground">Vaste honoraria per fase</span>
                   </label>
                 </div>
               </div>
@@ -476,7 +501,7 @@ export default function Budgets() {
               {/* Hourly rate */}
               {editForm.billing_type === "hourly" && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
                     Uurtarief (€)
                   </label>
                   <input
@@ -484,7 +509,7 @@ export default function Budgets() {
                     step="0.01"
                     value={editForm.default_rate_euros}
                     onChange={(e) => setEditForm(f => ({ ...f, default_rate_euros: e.target.value }))}
-                    className="w-32 border border-gray-300 rounded px-3 py-2 text-sm"
+                    className="w-32 border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
                   />
                 </div>
               )}
@@ -492,14 +517,14 @@ export default function Budgets() {
               {/* Phase budgets */}
               {editForm.billing_type === "fixed" && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-card-foreground mb-3">
                     Budget per fase (€)
                   </label>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-secondary/50 p-4 rounded-lg">
+                    <div className="grid grid-cols-1 gap-4">
                       {phases.map(phase => (
-                        <div key={phase.code} className="flex items-center gap-2">
-                          <span className="text-sm w-24 shrink-0">{phase.name}:</span>
+                        <div key={phase.code} className="flex items-center gap-3">
+                          <span className="text-sm font-medium w-32 text-card-foreground">{phase.name}:</span>
                           <input
                             type="number"
                             step="0.01"
@@ -514,7 +539,7 @@ export default function Budgets() {
                                 }
                               }))
                             }
-                            className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                            className="flex-1 border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
                           />
                         </div>
                       ))}
@@ -524,17 +549,17 @@ export default function Budgets() {
               )}
             </div>
 
-            <div className="flex gap-2 mt-6">
+            <div className="flex gap-3 mt-8">
               <button
                 onClick={() => setShowEditModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                className="flex-1 px-4 py-2.5 border border-border rounded-lg text-foreground hover:bg-secondary transition-colors"
               >
                 Annuleren
               </button>
               <button
                 onClick={handleSaveEdit}
                 disabled={updateProjectMutation.isPending}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300"
+                className="flex-1 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
               >
                 {updateProjectMutation.isPending ? "Opslaan..." : "Opslaan"}
               </button>

@@ -1,0 +1,105 @@
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+.no-scroll { overflow: hidden; }
+.has-sticky-header { padding-top: calc(56px + var(--safe-top)); }
+
+/* Sticky topbar */
+.mnav {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  height: 56px;
+  padding: calc(var(--safe-top) + 8px) 12px 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+  border-bottom: 1px solid rgba(0,0,0,.06);
+  backdrop-filter: saturate(180%) blur(6px);
+}
+
+.mnav__iconbtn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: #eff3f9;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.mnav__title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: .2px;
+}
+
+/* Drawer */
+.mnav__drawer {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(84vw, 340px);
+  background: #fff;
+  transform: translateX(-100%);
+  transition: transform .25s ease;
+  z-index: 1100;
+  box-shadow: 2px 0 20px rgba(0,0,0,.12);
+  display: flex;
+  flex-direction: column;
+}
+.mnav__drawer.is-open { transform: translateX(0); }
+
+.mnav__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+  z-index: 1090;
+}
+.mnav__backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mnav__drawerHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid rgba(0,0,0,.06);
+}
+.mnav__drawerTitle { font-weight: 700; }
+
+.mnav__list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.mnav__link {
+  display: block;
+  padding: 12px 10px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: #0f172a;
+  background: #f7f9fc;
+}
+.mnav__link:active { background: #eef2f8; }
+.mnav__link.is-active {
+  outline: 2px solid #4f46e5;
+  background: #eef2ff;
+}
+
+.mnav__footer {
+  margin-top: auto;
+  padding: 12px;
+  border-top: 1px solid rgba(0,0,0,.06);
+}

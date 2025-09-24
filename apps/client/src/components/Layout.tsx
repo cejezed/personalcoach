@@ -3,15 +3,14 @@ import { useLocation } from "react-router-dom";
 import type { User } from "@supabase/supabase-js";
 import Sidebar from "./Sidebar";
 import MobileNav from "./MobileNav";
-import { 
-  Bell, 
-  ChevronDown, 
+import {
+  Bell,
+  ChevronDown,
   User as UserIcon,
   Search,
   Settings,
   LogOut,
-  Moon,
-  Sun
+  Sun,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -21,34 +20,36 @@ interface LayoutProps {
 
 const getPageTitle = (pathname: string): string => {
   const routes: Record<string, string> = {
-    '/': 'Dashboard',
-    '/time': 'Time Tracking',
-    '/tasks': 'Tasks',
-    '/ideas': 'Ideas',
-    '/budgets': 'Budgets',
-    '/invoices': 'Invoices',
-    '/health': 'Health',
-    '/coach': 'Coach',
-    '/backup': 'Backup',
+    "/": "Dashboard",
+    "/time": "Time Tracking",
+    "/tasks": "Tasks",
+    "/ideas": "Ideas",
+    "/projecten": "Projecten",
+    "/budgets": "Budgets",
+    "/invoices": "Invoices",
+    "/health": "Health",
+    "/coach": "Coach",
+    "/backup": "Backup",
+    "/instellingen": "Instellingen",
   };
-  
-  return routes[pathname] || 'Dashboard';
+  return routes[pathname] || "Dashboard";
 };
 
 const getPageDescription = (pathname: string): string => {
   const descriptions: Record<string, string> = {
-    '/': 'Overzicht van je projecten en activiteiten',
-    '/time': 'Registreer en beheer je gewerkte uren',
-    '/tasks': 'Beheer je taken en to-do lijst',
-    '/ideas': 'Verzamel en organiseer je ideeën',
-    '/budgets': 'Beheer projectbudgetten en kosten',
-    '/invoices': 'Creëer en verstuur facturen',
-    '/health': 'Monitor je welzijn en gezondheid',
-    '/coach': 'AI-assistentie en begeleiding',
-    '/backup': 'Data backup en synchronisatie',
+    "/": "Overzicht van je projecten en activiteiten",
+    "/time": "Registreer en beheer je gewerkte uren",
+    "/tasks": "Beheer je taken en to-do lijst",
+    "/ideas": "Verzamel en organiseer je ideeën",
+    "/projecten": "Beheer je projecten en klanten",
+    "/budgets": "Beheer projectbudgetten en kosten",
+    "/invoices": "Creëer en verstuur facturen",
+    "/health": "Monitor je welzijn en gezondheid",
+    "/coach": "AI-assistentie en begeleiding",
+    "/backup": "Data backup en synchronisatie",
+    "/instellingen": "App instellingen en configuratie",
   };
-  
-  return descriptions[pathname] || 'Welkom bij Coach App';
+  return descriptions[pathname] || "Welkom bij Coach App";
 };
 
 export default function Layout({ children, user }: LayoutProps) {
@@ -59,16 +60,31 @@ export default function Layout({ children, user }: LayoutProps) {
   const [showNotifications, setShowNotifications] = useState(false);
 
   const handleSignOut = async () => {
-    // Deze functie zou geïmporteerd moeten worden uit je auth context
-    // Voor nu als placeholder
-    console.log('Sign out');
+    console.log("Sign out");
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <Sidebar />
-      <MobileNav />
-      
+
+      {/* Mobile Navigation */}
+      <MobileNav
+        title="Coach App"
+        items={[
+          { label: "Dashboard", href: "/" },
+          { label: "Time Tracking", href: "/time" },
+          { label: "Tasks", href: "/tasks" },
+          { label: "Ideas", href: "/ideas" },
+          { label: "Projecten", href: "/projecten" },
+          { label: "Budgets", href: "/budgets" },
+          { label: "Invoices", href: "/invoices" },
+          { label: "Health", href: "/health" },
+          { label: "Coach", href: "/coach" },
+          { label: "Backup", href: "/backup" },
+          { label: "Instellingen", href: "/instellingen" },
+        ]}
+      />
+
       {/* Main Content */}
       <div className="lg:pl-72">
         {/* Enhanced Top Header */}
@@ -117,19 +133,17 @@ export default function Layout({ children, user }: LayoutProps) {
                       type="button"
                       onClick={() => setShowNotifications(!showNotifications)}
                       className="relative p-2.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      data-testid="button-notifications"
                     >
                       <span className="sr-only">View notifications</span>
                       <Bell className="h-5 w-5" />
-                      {/* Notification Badge */}
                       <span className="absolute top-1.5 right-1.5 block h-2 w-2 rounded-full bg-red-400 ring-2 ring-white"></span>
                     </button>
-
-                    {/* Notifications Dropdown */}
                     {showNotifications && (
                       <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-slate-200 py-2 z-50">
                         <div className="px-4 py-3 border-b border-slate-100">
-                          <h3 className="text-sm font-semibold text-slate-900">Meldingen</h3>
+                          <h3 className="text-sm font-semibold text-slate-900">
+                            Meldingen
+                          </h3>
                         </div>
                         <div className="max-h-64 overflow-y-auto">
                           <div className="px-4 py-3 text-sm text-slate-500 text-center">
@@ -149,7 +163,10 @@ export default function Layout({ children, user }: LayoutProps) {
                     <Sun className="h-5 w-5" />
                   </button>
 
-                  <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-slate-200" aria-hidden="true"></div>
+                  <div
+                    className="hidden lg:block lg:h-6 lg:w-px lg:bg-slate-200"
+                    aria-hidden="true"
+                  />
 
                   {/* Profile Dropdown */}
                   <div className="relative">
@@ -157,35 +174,31 @@ export default function Layout({ children, user }: LayoutProps) {
                       type="button"
                       onClick={() => setShowProfileDropdown(!showProfileDropdown)}
                       className="flex items-center gap-x-3 px-3 py-2 text-sm font-medium leading-6 text-slate-700 hover:bg-slate-100 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      data-testid="button-profile"
                     >
                       <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
                         <UserIcon className="h-4 w-4 text-white" />
                       </div>
                       <span className="hidden lg:flex lg:items-center">
                         <span className="text-sm font-medium text-slate-900" aria-hidden="true">
-                          {user.email?.split('@')[0] || 'User'}
+                          {user.email?.split("@")[0] || "User"}
                         </span>
                         <ChevronDown className="ml-2 h-4 w-4 text-slate-400" />
                       </span>
                     </button>
-
-                    {/* Profile Dropdown Menu */}
                     {showProfileDropdown && (
                       <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-2 z-50">
                         <div className="px-4 py-3 border-b border-slate-100">
                           <p className="text-sm font-medium text-slate-900">
-                            {user.email?.split('@')[0] || 'User'}
+                            {user.email?.split("@")[0] || "User"}
                           </p>
                           <p className="text-xs text-slate-500 truncate">{user.email}</p>
                         </div>
-                        
                         <div className="py-1">
                           <button className="flex items-center w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
                             <Settings className="mr-3 h-4 w-4" />
                             Instellingen
                           </button>
-                          <button 
+                          <button
                             onClick={handleSignOut}
                             className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                           >
@@ -204,16 +217,14 @@ export default function Layout({ children, user }: LayoutProps) {
 
         {/* Page Content */}
         <main className="lg:mx-auto lg:max-w-7xl lg:px-8 pb-20 lg:pb-8">
-          <div className="px-4 py-8 sm:px-6 lg:px-0">
-            {children}
-          </div>
+          <div className="px-4 py-8 sm:px-6 lg:px-0">{children}</div>
         </main>
       </div>
 
       {/* Click outside handlers */}
       {(showProfileDropdown || showNotifications) && (
-        <div 
-          className="fixed inset-0 z-30" 
+        <div
+          className="fixed inset-0 z-30"
           onClick={() => {
             setShowProfileDropdown(false);
             setShowNotifications(false);
