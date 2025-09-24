@@ -337,7 +337,7 @@ export default function Time() {
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">Fase *</label>
               <div className="flex flex-wrap gap-2">
-                {phases
+                {Array.isArray(phases) && phases
                   .slice()
                   .sort((a, b) => a.sort_order - b.sort_order)
                   .map((ph) => {
@@ -551,15 +551,16 @@ export default function Time() {
                           </tr>
                         </thead>
                         <tbody>
-                          {Object.values(s.phaseBreakdown)
-                            .sort((a, b) => a.phase.sort_order - b.phase.sort_order)
-                            .map((row) => (
-                              <tr key={row.phase.code} className="border-t border-gray-100">
-                                <td className="py-2 pr-4">{row.phase.name}</td>
-                                <td className="py-2 pr-4">{row.hours.toFixed(1)}h</td>
-                                <td className="py-2 pr-0 text-right">{EUR(row.amount)}</td>
-                              </tr>
-                            ))}
+                          {Array.isArray(Object.values(s.phaseBreakdown)) &&
+                            Object.values(s.phaseBreakdown)
+                              .sort((a, b) => a.phase.sort_order - b.phase.sort_order)
+                              .map((row) => (
+                                <tr key={row.phase.code} className="border-t border-gray-100">
+                                  <td className="py-2 pr-4">{row.phase.name}</td>
+                                  <td className="py-2 pr-4">{row.hours.toFixed(1)}h</td>
+                                  <td className="py-2 pr-0 text-right">{EUR(row.amount)}</td>
+                                </tr>
+                              ))}
                         </tbody>
                       </table>
                     </div>
